@@ -10,4 +10,5 @@ add_executable(nestest
 	src/main.cpp
 	src/cpu.cpp
 	src/ines.cpp
+	src/ppu.cpp
 )

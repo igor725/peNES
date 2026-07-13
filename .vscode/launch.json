@@ -6,7 +6,10 @@
 			"type": "cppdbg",
 			"request": "launch",
 			"program": "${workspaceFolder}/build/nestest",
-			"args": [],
+			"args": [
+				// "./simple.nes",
+				"./2048.nes",
+			],
 			"stopAtEntry": false,
 			"cwd": "${workspaceFolder}/build",
 			"environment": [],

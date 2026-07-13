@@ -1,16 +1,19 @@
 #include "cpu.hh"
 #include "ines.hh"
+#include "ppu.hh"
 
 #include <cassert>
 
-int main(void) {
-  iNES cartridge("./2048.nes");
+int main(int argc, char* argv[]) {
+  iNES cartridge(argv[1]);
   assert(cartridge.isNTSC());
   CPU6502 cpu;
   assert(cpu.loadCartridge(cartridge));
+  PPU ppu(cpu);
 
   while (true) {
-    cpu.step();
+    auto cycles = cpu.step();
+    if (cycles >= 1) ppu.run(cycles * 3);
   }
 
   return 0;
