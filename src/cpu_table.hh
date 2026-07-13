@@ -340,7 +340,7 @@ constexpr std::array<InstItem, 256> CPU_INSTS = {
     InstItem(),
     InstItem(),
     InstItem(InstName::LDA, AddrMode::AbsoluteY, 3, 4),
-    InstItem(),
+    InstItem(InstName::TSX, AddrMode::Implied, 1, 2),
     InstItem(),
     InstItem(InstName::LDY, AddrMode::AbsoluteX, 3, 4),
     InstItem(InstName::LDA, AddrMode::AbsoluteX, 3, 4),

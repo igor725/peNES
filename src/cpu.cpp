@@ -82,7 +82,7 @@ uint8_t CPU6502::step() {
     } break;
     case 0x01: { // ORA (oper,X)
       uint8_t  lookup_address = inst->operand + m_regs.X;
-      uint16_t target_address = (readRam(lookup_address + 1) << 8) | readRam(lookup_address);
+      uint16_t target_address = (readRam(static_cast<uint8_t>(lookup_address + 1)) << 8) | readRam(lookup_address);
 
       m_regs.A |= readRam(target_address);
       updated |= _uacc;
@@ -111,12 +111,12 @@ uint8_t CPU6502::step() {
       if (m_regs.P.N == 0) m_regs.PC += inst->s_operand;
     } break;
     case 0x16: { // ASL zp,X
-      auto addr = inst->operand + m_regs.X;
-      auto orig = readRam(addr);
-      auto res  = writeRam(addr, orig << 1);
+      uint8_t addr = static_cast<uint8_t>(inst->operand + m_regs.X);
+      auto    orig = readRam(addr);
+      auto    res  = writeRam(addr, orig << 1);
 
       m_regs.P.C = (orig & 0x80) > 0;
-      m_regs.P.Z = (m_regs.A & res) == 0;
+      m_regs.P.Z = (res == 0);
       m_regs.P.N = (res & 0x80) > 0;
     } break;
     case 0x18: { // CLC
@@ -132,6 +132,15 @@ uint8_t CPU6502::step() {
       if ((base_addr & 0xFF00) != (target_addr & 0xFF00)) {
         cycles += 1;
       }
+    } break;
+    case 0x1E: { // ASL abs,X
+      auto addr = inst->operandw + m_regs.X;
+      auto orig = readRam(addr);
+      auto res  = writeRam(addr, orig << 1);
+
+      m_regs.P.C = (orig & 0x80) > 0;
+      m_regs.P.Z = (res == 0);
+      m_regs.P.N = (res & 0x80) > 0;
     } break;
     case 0x20: { // JSR abs
       pushStack<uint16_t>(m_regs.PC - 1);
@@ -187,7 +196,7 @@ uint8_t CPU6502::step() {
       m_regs.P.C = 1;
     } break;
     case 0x3D: { // AND oper,X
-      m_regs.A &= readRam(inst->operand + m_regs.X);
+      m_regs.A &= readRam(static_cast<uint8_t>(inst->operand + m_regs.X));
       updated |= _uacc;
     } break;
     case 0x40: {
@@ -251,7 +260,9 @@ uint8_t CPU6502::step() {
       updated |= _uacc;
     } break;
     case 0x6C: { // JMP (oper)
-      m_regs.PC = (readRam(inst->operandw + 1) << 8) | readRam(inst->operandw);
+      uint16_t low_addr  = inst->operandw;
+      uint16_t high_addr = (low_addr & 0xFF00) | static_cast<uint8_t>((low_addr & 0xFF) + 1);
+      m_regs.PC          = (readRam(high_addr) << 8) | readRam(low_addr);
     } break;
     case 0x6D: { // ADC abs
       uint8_t  operand = readRam(inst->operandw);
@@ -309,7 +320,7 @@ uint8_t CPU6502::step() {
       if (m_regs.P.C == 0) m_regs.PC += inst->s_operand;
     } break;
     case 0x91: { // STA (oper),Y
-      uint16_t base_address   = (readRam(inst->operand + 1) << 8) | readRam(inst->operand);
+      uint16_t base_address   = (readRam(static_cast<uint8_t>(inst->operand + 1)) << 8) | readRam(inst->operand);
       uint16_t target_address = base_address + m_regs.Y;
       writeRam(target_address, m_regs.A);
     } break;
@@ -397,6 +408,10 @@ uint8_t CPU6502::step() {
       if ((base_addr & 0xFF00) != (target_addr & 0xFF00)) { // Page boundary crossed
         cycles += 1;
       }
+    } break;
+    case 0xBA: { // TSX
+      m_regs.X = m_regs.S;
+      updated |= _ux;
     } break;
     case 0xBC: { // LDY oper,X
       uint16_t addr = inst->operandw + m_regs.X;
