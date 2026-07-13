@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <map>
 
 class iNES {
   struct File {
@@ -46,11 +47,17 @@ class iNES {
 
   bool isNTSC() const { return m_file->hdr.tv_sys == 0; }
 
+  bool isVerticalMirror() const { return m_file->hdr.flags6.mirroring == 1; }
+
   void copyPRG(uint8_t* dst) const {
     ::memcpy(dst, m_file->data, PRG_BLOCK_SIZE * m_file->hdr.prg_size);
     if (m_file->hdr.prg_size < 2) ::memcpy(dst + PRG_BLOCK_SIZE, m_file->data, PRG_BLOCK_SIZE);
   }
 
+  uint8_t readChr(uint16_t addr) const;
+  void    writeChr(uint16_t addr, uint8_t value);
+
   private:
-  File const* m_file;
+  File const*                 m_file;
+  std::map<uint16_t, uint8_t> a;
 };

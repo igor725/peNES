@@ -9,6 +9,7 @@
 			"args": [
 				// "./simple.nes",
 				"./2048.nes",
+				// "./smb.nes",
 			],
 			"stopAtEntry": false,
 			"cwd": "${workspaceFolder}/build",

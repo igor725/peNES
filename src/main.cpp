@@ -9,7 +9,7 @@ int main(int argc, char* argv[]) {
   assert(cartridge.isNTSC());
   CPU6502 cpu;
   assert(cpu.loadCartridge(cartridge));
-  PPU ppu(cpu);
+  PPU ppu(cpu, cartridge);
 
   while (true) {
     auto cycles = cpu.step();
