@@ -4,7 +4,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <map>
 
 class iNES {
   struct File {
@@ -54,10 +53,10 @@ class iNES {
     if (m_file->hdr.prg_size < 2) ::memcpy(dst + PRG_BLOCK_SIZE, m_file->data, PRG_BLOCK_SIZE);
   }
 
-  uint8_t readChr(uint16_t addr) const;
-  void    writeChr(uint16_t addr, uint8_t value);
+  uint8_t readChr(uint16_t addr) const { return m_file->data[(PRG_BLOCK_SIZE * m_file->hdr.prg_size) + (addr & 0x1FFF)]; }
+
+  void writeChr(uint16_t addr, uint8_t value) { m_file->data[(PRG_BLOCK_SIZE * m_file->hdr.prg_size) + (addr & 0x1FFF)] = value; }
 
   private:
-  File const*                 m_file;
-  std::map<uint16_t, uint8_t> a;
+  File* m_file;
 };

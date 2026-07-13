@@ -74,9 +74,9 @@ uint8_t CPU6502::step() {
   uint8_t updated = 0, cycles = instInfo.cycles;
 
   switch (inst->opcode) {
-    case 0x00: {
+    case 0x00: { // BRK
       pushStack<uint16_t>(m_regs.PC + 1 /* 1 byte padding? */);
-      m_regs.P.I = true;
+      m_regs.P.I = 1, m_regs.P.B = 1;
       pushStack<uint8_t>(m_regs.P._raw);
       m_regs.PC = (m_ram[0xFFFF] << 8) | m_ram[0xFFFE];
     } break;
@@ -91,8 +91,11 @@ uint8_t CPU6502::step() {
       m_regs.A |= readRam(inst->operand);
       updated |= _uacc;
     } break;
-    case 0x08: {
-      pushStack<uint8_t>(m_regs.P._raw);
+    case 0x08: { // PHP
+      auto p = m_regs.P;
+
+      p.B = 1;
+      pushStack<uint8_t>(p._raw);
     } break;
     case 0x09: { // ORA imm
       m_regs.A |= inst->operand;
@@ -107,8 +110,23 @@ uint8_t CPU6502::step() {
       m_regs.A |= readRam(inst->operandw);
       updated |= _uacc;
     } break;
-    case 0x10: { // BPL
-      if (m_regs.P.N == 0) m_regs.PC += inst->s_operand;
+    case 0x0E: { // ASL abs
+      auto orig = readRam(inst->operandw);
+      auto res  = writeRam(inst->operandw, orig << 1);
+
+      m_regs.P.C = (orig & 0x80) > 0;
+      m_regs.P.Z = (res == 0);
+      m_regs.P.N = (res & 0x80) > 0;
+    } break;
+    case 0x10: { // BPL rel
+      if (m_regs.P.N == 0) {
+        uint16_t old_pc = m_regs.PC;
+        m_regs.PC += inst->s_operand;
+        cycles += 1;
+        if ((old_pc & 0xFF00) != (m_regs.PC & 0xFF00)) {
+          cycles += 1;
+        }
+      }
     } break;
     case 0x16: { // ASL zp,X
       uint8_t addr = static_cast<uint8_t>(inst->operand + m_regs.X);
@@ -152,8 +170,20 @@ uint8_t CPU6502::step() {
       m_regs.P.N = (test & 0x80) > 0;
       m_regs.P.V = (test & 0x40) > 0;
     } break;
+    case 0x26: { // ROL zp
+      uint8_t value          = readRam(inst->operand);
+      uint8_t incoming_carry = m_regs.P.C ? 1 : 0;
+
+      m_regs.P.C = (value & 0x80) != 0;
+
+      uint8_t shifted_value = (value << 1) | incoming_carry;
+
+      writeRam(inst->operand, shifted_value);
+      m_regs.P.Z = (shifted_value == 0);
+      m_regs.P.N = (shifted_value & 0x80) != 0;
+    } break;
     case 0x28: { // PLP
-      m_regs.P._raw = popStack<uint8_t>();
+      m_regs.P._raw = (popStack<uint8_t>() & 0xEF) | 0x20;
     } break;
     case 0x29: { // AND imm
       m_regs.A &= inst->operand;
@@ -175,8 +205,31 @@ uint8_t CPU6502::step() {
       m_regs.P.N = (test & 0x80) > 0;
       m_regs.P.V = (test & 0x40) > 0;
     } break;
-    case 0x30: {
-      if (m_regs.P.N == 1) m_regs.PC += inst->s_operand;
+    case 0x2D: { // AND oper
+      m_regs.A &= readRam(inst->operandw);
+      updated |= _uacc;
+    } break;
+    case 0x2E: { // ROL abs
+      uint8_t value          = readRam(inst->operandw);
+      uint8_t incoming_carry = m_regs.P.C ? 1 : 0;
+
+      m_regs.P.C = (value & 0x80) != 0;
+
+      uint8_t shifted_value = (value << 1) | incoming_carry;
+
+      writeRam(inst->operandw, shifted_value);
+      m_regs.P.Z = (shifted_value == 0);
+      m_regs.P.N = (shifted_value & 0x80) != 0;
+    } break;
+    case 0x30: { // BMI rel
+      if (m_regs.P.N == 1) {
+        uint16_t old_pc = m_regs.PC;
+        m_regs.PC += inst->s_operand;
+        cycles += 1;
+        if ((old_pc & 0xFF00) != (m_regs.PC & 0xFF00)) {
+          cycles += 1;
+        }
+      }
     } break;
     case 0x36: { // ROL zp,X
       uint8_t addr = static_cast<uint8_t>(inst->operand + m_regs.X);
@@ -192,16 +245,16 @@ uint8_t CPU6502::step() {
       m_regs.P.Z = (shifted_value == 0);
       m_regs.P.N = (shifted_value & 0x80) != 0;
     } break;
-    case 0x38: {
+    case 0x38: { // SEC
       m_regs.P.C = 1;
     } break;
     case 0x3D: { // AND oper,X
       m_regs.A &= readRam(static_cast<uint8_t>(inst->operand + m_regs.X));
       updated |= _uacc;
     } break;
-    case 0x40: {
-      m_regs.S  = popStack<uint8_t>();
-      m_regs.PC = popStack<uint16_t>();
+    case 0x40: { // RTI
+      m_regs.P._raw = (popStack<uint8_t>() & 0xEF) | 0x20;
+      m_regs.PC     = popStack<uint16_t>();
     } break;
     case 0x45: { // EOR zp
       m_regs.A ^= readRam(inst->operand);
@@ -218,6 +271,10 @@ uint8_t CPU6502::step() {
     case 0x48: { // PHA
       pushStack<uint8_t>(m_regs.A);
     } break;
+    case 0x49: { // EOR imm
+      m_regs.A ^= inst->operand;
+      updated |= _uacc;
+    } break;
     case 0x4A: { // LSR A
       m_regs.P.C = (m_regs.A & 0x01) != 0;
       m_regs.A >>= 1;
@@ -225,6 +282,18 @@ uint8_t CPU6502::step() {
     } break;
     case 0x4C: { // JMP
       m_regs.PC = inst->operandw;
+    } break;
+    case 0x4D: { // EOR abs
+      m_regs.A ^= readRam(inst->operandw);
+      updated |= _uacc;
+    } break;
+    case 0x4E: { // LSR abs
+      auto orig = readRam(inst->operandw);
+      auto wr   = writeRam(inst->operandw, orig >> 1);
+
+      m_regs.P.N = 0;
+      m_regs.P.Z = wr == 0;
+      m_regs.P.C = (orig & 0x01) != 0;
     } break;
     case 0x5D: { // EOR abs,X
       uint16_t addr = inst->operandw + m_regs.X;
@@ -259,6 +328,14 @@ uint8_t CPU6502::step() {
       m_regs.A        = result & 0xFF;
       updated |= _uacc;
     } break;
+    case 0x6A: { // ROR A
+      uint8_t incoming_carry = m_regs.P.C ? 0x80 : 0x00;
+      uint8_t shifted_value  = (m_regs.A >> 1) | incoming_carry;
+      m_regs.P.C             = (m_regs.A & 0x01) != 0;
+
+      m_regs.A = shifted_value;
+      updated |= _uacc;
+    } break;
     case 0x6C: { // JMP (oper)
       uint16_t low_addr  = inst->operandw;
       uint16_t high_addr = (low_addr & 0xFF00) | static_cast<uint8_t>((low_addr & 0xFF) + 1);
@@ -275,6 +352,15 @@ uint8_t CPU6502::step() {
     } break;
     case 0x78: { // SEI
       m_regs.P.I = true;
+    } break;
+    case 0x79: { // ADC abs,Y
+      uint8_t  operand = readRam(inst->operandw + m_regs.Y);
+      uint16_t res     = m_regs.A + operand + (m_regs.P.C ? 1 : 0);
+
+      m_regs.P.C = res > 0xFF;
+      m_regs.P.V = (~(m_regs.A ^ operand) & (m_regs.A ^ res) & 0x80) != 0x00;
+      m_regs.A   = res & 0xFF;
+      updated |= _uacc;
     } break;
     case 0x7E: { // ROR abs,X
       uint16_t base_addr   = inst->operandw;
@@ -316,8 +402,15 @@ uint8_t CPU6502::step() {
     case 0x8E: { // STX abs
       writeRam(inst->operandw, m_regs.X);
     } break;
-    case 0x90: {
-      if (m_regs.P.C == 0) m_regs.PC += inst->s_operand;
+    case 0x90: { // BCC rel
+      if (m_regs.P.C == 0) {
+        uint16_t old_pc = m_regs.PC;
+        m_regs.PC += inst->s_operand;
+        cycles += 1;
+        if ((old_pc & 0xFF00) != (m_regs.PC & 0xFF00)) {
+          cycles += 1;
+        }
+      }
     } break;
     case 0x91: { // STA (oper),Y
       uint16_t base_address   = (readRam(static_cast<uint8_t>(inst->operand + 1)) << 8) | readRam(inst->operand);
@@ -384,8 +477,15 @@ uint8_t CPU6502::step() {
       m_regs.X = readRam(inst->operandw);
       updated |= _ux;
     } break;
-    case 0xB0: {
-      if (m_regs.P.C == 1) m_regs.PC += inst->s_operand;
+    case 0xB0: { // BCS rel
+      if (m_regs.P.C == 1) {
+        uint16_t old_pc = m_regs.PC;
+        m_regs.PC += inst->s_operand;
+        cycles += 1;
+        if ((old_pc & 0xFF00) != (m_regs.PC & 0xFF00)) {
+          cycles += 1;
+        }
+      }
     } break;
     case 0xB1: { // LDA (oper),Y
       uint16_t base_addr   = (readRam((inst->operand + 1) & 0xFF) << 8) | readRam(inst->operand);
@@ -397,6 +497,10 @@ uint8_t CPU6502::step() {
       if ((base_addr & 0xFF00) != (target_addr & 0xFF00)) { // Page boundary crossed
         cycles += 1;
       }
+    } break;
+    case 0xB5: { // LDA zp,X
+      m_regs.A = readRam(inst->operand + m_regs.X);
+      updated |= _uacc;
     } break;
     case 0xB9: { // LDA abs,Y
       uint16_t base_addr   = inst->operandw;
@@ -499,10 +603,53 @@ uint8_t CPU6502::step() {
       m_regs.P.N = (res & 0x80) > 0;
     } break;
     case 0xD0: { // BNE rel
-      if (m_regs.P.Z == 0) m_regs.PC += inst->s_operand;
+      if (m_regs.P.Z == 0) {
+        uint16_t old_pc = m_regs.PC;
+        m_regs.PC += inst->s_operand;
+        cycles += 1;
+        if ((old_pc & 0xFF00) != (m_regs.PC & 0xFF00)) {
+          cycles += 1;
+        }
+      }
     } break;
     case 0xD8: { // CLD
       m_regs.P.D = false;
+    } break;
+    case 0xD5: { // CMP zp,X
+      uint8_t operand = readRam(inst->operand + m_regs.X);
+      uint8_t val     = m_regs.A - operand;
+
+      m_regs.P.C = m_regs.A >= operand;
+      m_regs.P.Z = val == 0;
+      m_regs.P.N = (val & 0x80) > 0;
+    } break;
+    case 0xD9: { // CMP abs,Y
+      uint16_t base_addr   = inst->operandw;
+      uint16_t target_addr = base_addr + m_regs.Y;
+      uint8_t  operand     = readRam(target_addr);
+      uint8_t  val         = m_regs.A - operand;
+
+      m_regs.P.C = m_regs.A >= operand;
+      m_regs.P.Z = val == 0;
+      m_regs.P.N = (val & 0x80) > 0;
+
+      if ((base_addr & 0xFF00) != (target_addr & 0xFF00)) {
+        cycles += 1;
+      }
+    } break;
+    case 0xDD: { // CMP abs,X
+      uint16_t base_addr   = inst->operandw;
+      uint16_t target_addr = base_addr + m_regs.X;
+      uint8_t  operand     = readRam(target_addr);
+      uint8_t  val         = m_regs.A - operand;
+
+      m_regs.P.C = m_regs.A >= operand;
+      m_regs.P.Z = val == 0;
+      m_regs.P.N = (val & 0x80) > 0;
+
+      if ((base_addr & 0xFF00) != (target_addr & 0xFF00)) {
+        cycles += 1;
+      }
     } break;
     case 0xDE: { // DEC oper,X
       auto addr = inst->operandw + m_regs.X;
@@ -519,6 +666,13 @@ uint8_t CPU6502::step() {
       m_regs.P.Z = val == 0;
       m_regs.P.N = (val & 0x80) > 0;
     } break;
+    case 0xE4: { // CPX zp
+      uint8_t val = m_regs.X - readRam(inst->operand);
+
+      m_regs.P.C = m_regs.X >= readRam(inst->operand);
+      m_regs.P.Z = val == 0;
+      m_regs.P.N = (val & 0x80) > 0;
+    } break;
     case 0xE6: {
       auto res = writeRam(inst->operand, readRam(inst->operand) + 1);
 
@@ -529,6 +683,16 @@ uint8_t CPU6502::step() {
       m_regs.X += 1;
       updated |= _ux;
     } break;
+    case 0xE9: { // SBC imm
+      uint8_t  inverted_value = ~inst->operand;
+      uint16_t carry_in       = m_regs.P.C ? 1 : 0;
+      uint16_t res            = m_regs.A + inverted_value + carry_in;
+
+      m_regs.P.V = ((m_regs.A ^ res) & (inverted_value ^ res) & 0x80) != 0;
+      m_regs.P.C = res > 0xFF;
+      m_regs.A   = res & 0xFF;
+      updated |= _uacc;
+    } break;
     case 0xEE: { // INC
       auto res = writeRam(inst->operandw, readRam(inst->operandw) + 1);
 
@@ -536,7 +700,14 @@ uint8_t CPU6502::step() {
       m_regs.P.N = (res & 0x80) > 0;
     } break;
     case 0xF0: { // BEQ
-      if (m_regs.P.Z == 1) m_regs.PC += inst->s_operand;
+      if (m_regs.P.Z == 1) {
+        uint16_t old_pc = m_regs.PC;
+        m_regs.PC += inst->s_operand;
+        cycles += 1;
+        if ((old_pc & 0xFF00) != (m_regs.PC & 0xFF00)) {
+          cycles += 1;
+        }
+      }
     } break;
     case 0xF6: { // INC zp,X
       auto addr = static_cast<uint8_t>(inst->operand + m_regs.X);
@@ -549,6 +720,22 @@ uint8_t CPU6502::step() {
     case 0xF9: { // SBC abs,Y
       uint16_t base_addr      = inst->operandw;
       uint16_t target_addr    = base_addr + m_regs.Y;
+      uint8_t  inverted_value = ~readRam(target_addr);
+      uint16_t carry_in       = m_regs.P.C ? 1 : 0;
+      uint16_t res            = m_regs.A + inverted_value + carry_in;
+
+      m_regs.P.V = ((m_regs.A ^ res) & (inverted_value ^ res) & 0x80) != 0;
+      m_regs.P.C = res > 0xFF;
+      m_regs.A   = res & 0xFF;
+      updated |= _uacc;
+
+      if ((base_addr & 0xFF00) != (target_addr & 0xFF00)) {
+        cycles += 1;
+      }
+    } break;
+    case 0xFD: { // SBC abs,X
+      uint16_t base_addr      = inst->operandw;
+      uint16_t target_addr    = base_addr + m_regs.X;
       uint8_t  inverted_value = ~readRam(target_addr);
       uint16_t carry_in       = m_regs.P.C ? 1 : 0;
       uint16_t res            = m_regs.A + inverted_value + carry_in;
