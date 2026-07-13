@@ -41,5 +41,4 @@ class PPU {
   uint16_t m_cycle, m_scanline;
 
   uint32_t m_frame_buffer[256 * 240];
-  bool     m_frameReady;
 };

@@ -170,6 +170,10 @@ uint8_t CPU6502::step() {
       m_regs.P.N = (test & 0x80) > 0;
       m_regs.P.V = (test & 0x40) > 0;
     } break;
+    case 0x25: { // AND zp
+      m_regs.A &= readRam(inst->operand);
+      updated |= _uacc;
+    } break;
     case 0x26: { // ROL zp
       uint8_t value          = readRam(inst->operand);
       uint8_t incoming_carry = m_regs.P.C ? 1 : 0;
@@ -247,6 +251,10 @@ uint8_t CPU6502::step() {
     } break;
     case 0x38: { // SEC
       m_regs.P.C = 1;
+    } break;
+    case 0x39: { // AND oper,Y
+      m_regs.A &= readRam(static_cast<uint8_t>(inst->operand + m_regs.Y));
+      updated |= _uacc;
     } break;
     case 0x3D: { // AND oper,X
       m_regs.A &= readRam(static_cast<uint8_t>(inst->operand + m_regs.X));
@@ -436,6 +444,13 @@ uint8_t CPU6502::step() {
     case 0xA0: { // LDY imm
       m_regs.Y = inst->operand;
       updated |= _uy;
+    } break;
+    case 0xA1: { // LDA (oper,X)
+      uint8_t  lookup_address = static_cast<uint8_t>(inst->operand + m_regs.X);
+      uint16_t target_address = (readRam(static_cast<uint8_t>(lookup_address + 1)) << 8) | readRam(lookup_address);
+
+      m_regs.A = readRam(target_address);
+      updated |= _uacc;
     } break;
     case 0xA2: { // LDX imm
       m_regs.X = inst->operand;
@@ -673,6 +688,16 @@ uint8_t CPU6502::step() {
       m_regs.P.Z = val == 0;
       m_regs.P.N = (val & 0x80) > 0;
     } break;
+    case 0xE5: { // SBC zp
+      uint8_t  inverted_value = ~readRam(inst->operand);
+      uint16_t carry_in       = m_regs.P.C ? 1 : 0;
+      uint16_t res            = m_regs.A + inverted_value + carry_in;
+
+      m_regs.P.V = ((m_regs.A ^ res) & (inverted_value ^ res) & 0x80) != 0;
+      m_regs.P.C = res > 0xFF;
+      m_regs.A   = res & 0xFF;
+      updated |= _uacc;
+    } break;
     case 0xE6: {
       auto res = writeRam(inst->operand, readRam(inst->operand) + 1);
 
@@ -692,6 +717,8 @@ uint8_t CPU6502::step() {
       m_regs.P.C = res > 0xFF;
       m_regs.A   = res & 0xFF;
       updated |= _uacc;
+    } break;
+    case 0xEA: { // NOP
     } break;
     case 0xEE: { // INC
       auto res = writeRam(inst->operandw, readRam(inst->operandw) + 1);

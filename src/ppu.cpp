@@ -118,7 +118,7 @@ void saveFramebufferToBmp(const uint32_t* framebuffer, const std::string& filena
   }
 }
 
-PPU::PPU(CPU6502& c, iNES& i): m_cpu(c), m_cartridge(i), m_cycle(0), m_scanline(0), m_frameReady(false) {
+PPU::PPU(CPU6502& c, iNES& i): m_cpu(c), m_cartridge(i), m_cycle(0), m_scanline(0) {
   c.setPPU(this);
 }
 
@@ -286,8 +286,7 @@ void PPU::step() {
   if (++m_cycle > 340) {
     m_cycle = 0;
     if (++m_scanline > 261) {
-      m_scanline   = 0;
-      m_frameReady = true;
+      m_scanline = 0;
       saveFramebufferToBmp(m_frame_buffer, "/tmp/test.bmp");
     }
   }
