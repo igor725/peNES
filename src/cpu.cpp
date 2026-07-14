@@ -55,6 +55,12 @@ uint8_t CPU6502::handleControl(Instruction inst) {
         p.B = 1;
         pushStack<uint8_t>(p._raw);
         return 3;
+      } else if (inst.getAddrMode() == 0x01) /* NOP */ {
+        ++m_regs.PC;
+        return 2;
+      } else if (inst.getAddrMode() == 0x03) /* NOP */ {
+        readRam<uint16_t>(readPC<uint16_t>());
+        return 4;
       } else if (inst.getAddrMode() == 0x06) /* CLC */ {
         m_regs.P.C = 0;
         return 2;
@@ -99,6 +105,9 @@ uint8_t CPU6502::handleControl(Instruction inst) {
       } else if (inst.getAddrMode() == 0x03) /* JMP abs */ {
         m_regs.PC = readPC<uint16_t>();
         return 3;
+      } else if (inst.getAddrMode() == 0x06) /* CLI */ {
+        m_regs.P.I = 0;
+        return 2;
       }
     } break;
     case 0x03: {
@@ -228,6 +237,9 @@ uint8_t CPU6502::handleControl(Instruction inst) {
         m_regs.X += 1;
         m_regs.P.Z = m_regs.X == 0;
         m_regs.P.N = (m_regs.X & 0x80) > 0;
+        return 2;
+      } else if (inst.getAddrMode() == 0x06) /* SED */ {
+        m_regs.P.D = 1;
         return 2;
       }
     } break;
@@ -588,7 +600,14 @@ uint8_t CPU6502::handleShift(Instruction inst) {
         m_regs.P.Z = res == 0;
         m_regs.P.N = (res & 0x80) > 0;
         return 6;
-      } else if (inst.getAddrMode() == 0x07) /* DEC oper,X */ {
+      } else if (inst.getAddrMode() == 0x05) /* DEC zp,X */ {
+        auto const addr = static_cast<uint8_t>(readPC<uint8_t>() + m_regs.X);
+        auto const res  = writeRamByte(addr, readRamByte(addr) - 1);
+
+        m_regs.P.Z = res == 0;
+        m_regs.P.N = (res & 0x80) > 0;
+        return 7;
+      } else if (inst.getAddrMode() == 0x07) /* DEC abs,X */ {
         auto const addr = readPC<uint16_t>() + m_regs.X;
         auto const res  = writeRamByte(addr, readRamByte(addr) - 1);
 
@@ -606,8 +625,7 @@ uint8_t CPU6502::handleShift(Instruction inst) {
         m_regs.P.Z = res == 0;
         m_regs.P.N = (res & 0x80) > 0;
         return 5;
-      } else if (inst.getAddrMode() == 0x02) {
-        // NOP
+      } else if (inst.getAddrMode() == 0x02) /* NOP */ {
         return 2;
       } else if (inst.getAddrMode() == 0x03) /* INC abs */ {
         auto const operand = readPC<uint16_t>();

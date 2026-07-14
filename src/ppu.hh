@@ -3,6 +3,7 @@
 #include "cpu.hh"
 #include "ines.hh"
 #include "mmu.hh"
+#include "palette.hh"
 
 #include <SDL3/SDL_stdinc.h>
 #include <cstdint>
@@ -17,9 +18,13 @@ class PPU: public MMU {
   uint8_t dmaWrite(uint16_t addr, uint8_t value);
 
   void                      run(uint8_t cycles);
-  std::span<uint32_t const> getFrame() const;
+  std::span<uint32_t const> getFrame();
 
   bool isFrameReady() const { return m_frameReady; };
+
+  void setVerticalMirroring() { m_mirrorVertically = true; }
+
+  std::span<uint8_t> prepareCHRMemory();
 
   protected:
   uint16_t getNametableMirroringOffset(uint16_t address);
@@ -30,7 +35,8 @@ class PPU: public MMU {
 
   private:
   CPU6502& m_cpu;
-  iNES&    m_cartridge;
+
+  Palette m_colorPalette;
 
   uint8_t m_vram[2048];
   uint8_t m_palette[32];
@@ -50,7 +56,9 @@ class PPU: public MMU {
 
   uint16_t m_cycle, m_scanline;
 
-  uint32_t m_frame_buffer[256 * 240];
+  uint32_t m_frameBuffer[256 * 240];
 
-  mutable bool m_frameReady;
+  std::span<uint8_t> m_chrRam;
+
+  bool m_frameReady, m_mirrorVertically;
 };

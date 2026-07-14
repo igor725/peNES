@@ -105,9 +105,7 @@ class CPU6502: public MMU {
       return static_cast<T>(readRamByte(addr));
     } else if constexpr (sizeof(T) == 2) {
       if (addr == 0xFFFF) throw;
-      auto _low  = readRamByte(addr);
-      auto _high = readRamByte(addr + 1);
-      return static_cast<T>((_high << 8) | _low);
+      return static_cast<T>((readRamByte(addr + 1) << 8) | readRamByte(addr));
     }
   }
 

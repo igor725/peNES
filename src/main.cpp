@@ -77,7 +77,7 @@ int main(int argc, char* argv[]) {
   ppu.addRangeHandler({0x0000, 0x1FFF}, [&, chr = nullptr](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
     auto const romAddr = cartridge.resolvePPU(addr);
     if (romAddr == 0) /* No CHR data in cartridge */ {
-      static auto chrRam = new uint8_t[0x2000];
+      auto const chrRam = ppu.prepareCHRMemory();
       if (isWrite) return chrRam[addr] = value;
       return chrRam[addr];
     }
@@ -115,6 +115,8 @@ int main(int argc, char* argv[]) {
     auto const romAddr = cartridge.resolveCPU(addr);
     return cartridge->data[romAddr];
   });
+
+  if (cartridge->isVerticalMirror()) ppu.setVerticalMirroring();
   cpu.reset();
 
   bool stopped = false;
