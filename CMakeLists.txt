@@ -1,14 +1,16 @@
 cmake_minimum_required(VERSION 3.16)
-project(NES LANGUAGES CXX)
+project(peNES LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
-include(FetchContent)
+find_package(SDL3 REQUIRED)
 
 add_compile_options(-march=native)
 
-add_executable(nestest
+add_executable(peNES
 	src/main.cpp
 	src/cpu.cpp
 	src/ines.cpp
 	src/ppu.cpp
+	src/mmu.cpp
 )
+target_link_libraries(peNES PRIVATE SDL3::SDL3)

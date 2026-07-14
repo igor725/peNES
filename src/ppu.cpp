@@ -3,9 +3,6 @@
 #include "cpu.hh"
 #include "ines.hh"
 
-#include <fstream>
-#include <vector>
-
 struct RGB {
   uint8_t r;
   uint8_t g;
@@ -25,102 +22,7 @@ static const RGB NES_SYSTEM_PALETTE[64] = {
     {0x00, 0x00, 0x00},
 };
 
-void saveFramebufferToBmp(const uint32_t* framebuffer, const std::string& filename) {
-  const uint32_t width  = 256;
-  const uint32_t height = 240;
-
-  const uint32_t rowSize       = width * 3;
-  const uint32_t pixelDataSize = rowSize * height;
-  const uint32_t fileSize      = 54 + pixelDataSize;
-
-  std::ofstream file(filename, std::ios::out | std::ios::binary);
-  if (!file) return;
-
-  // 1. Standard 14-byte Bitmap File Header
-  uint8_t fileHeader[14] = {
-      'B',
-      'M',
-      static_cast<uint8_t>(fileSize & 0xFF),
-      static_cast<uint8_t>((fileSize >> 8) & 0xFF),
-      static_cast<uint8_t>((fileSize >> 16) & 0xFF),
-      static_cast<uint8_t>((fileSize >> 24) & 0xFF),
-      0,
-      0,
-      0,
-      0,
-      54,
-      0,
-      0,
-      0,
-  };
-  file.write(reinterpret_cast<char*>(fileHeader), sizeof(fileHeader));
-
-  uint8_t dibHeader[40] = {
-      40,
-      0,
-      0,
-      0,
-      static_cast<uint8_t>(width & 0xFF),
-      static_cast<uint8_t>((width >> 8) & 0xFF),
-      0,
-      0,
-      static_cast<uint8_t>(height & 0xFF),
-      static_cast<uint8_t>((height >> 8) & 0xFF),
-      0,
-      0,
-      1,
-      0,
-      24,
-      0,
-      0,
-      0,
-      0,
-      0,
-      static_cast<uint8_t>(pixelDataSize & 0xFF),
-      static_cast<uint8_t>((pixelDataSize >> 8) & 0xFF),
-      static_cast<uint8_t>((pixelDataSize >> 16) & 0xFF),
-      static_cast<uint8_t>((pixelDataSize >> 24) & 0xFF),
-      0x13,
-      0x0B,
-      0,
-      0,
-      0x13,
-      0x0B,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-  };
-  file.write(reinterpret_cast<char*>(dibHeader), sizeof(dibHeader));
-
-  std::vector<uint8_t> rowBuffer(rowSize);
-
-  for (int y = static_cast<int>(height) - 1; y >= 0; --y) {
-    size_t bufferIndex = 0;
-    for (uint32_t x = 0; x < width; ++x) {
-      uint32_t packedPixel = framebuffer[y * width + x];
-
-      uint8_t r = (packedPixel >> 16) & 0xFF;
-      uint8_t g = (packedPixel >> 8) & 0xFF;
-      uint8_t b = packedPixel & 0xFF;
-
-      rowBuffer[bufferIndex++] = b;
-      rowBuffer[bufferIndex++] = g;
-      rowBuffer[bufferIndex++] = r;
-    }
-    file.write(reinterpret_cast<char*>(rowBuffer.data()), rowSize);
-  }
-}
-
-PPU::PPU(CPU6502& c, iNES& i): m_cpu(c), m_cartridge(i), m_cycle(0), m_scanline(0) {
-  c.setPPU(this);
-}
+PPU::PPU(CPU6502& c, iNES& i): m_cpu(c), m_cartridge(i), m_cycle(0), m_scanline(0), m_frameReady(false) {}
 
 PPU::~PPU() {}
 
@@ -185,38 +87,53 @@ uint8_t PPU::cpuRead(uint16_t addr) {
   uint8_t data = 0;
   switch ((addr - 0x2000) % 8) {
     case 2:
-      data = m_reg_status;
-      m_reg_status &= ~0x80;
-      m_address_latch = 0;
+      data = m_reg.status;
+      m_reg.status &= ~0x80;
+      m_addrLatch = 0;
       break;
 
     case 7:
-      data = readInternal(m_vram_address);
-      m_vram_address += (m_reg_ctrl & 0x04) ? 32 : 1;
+      data = readInternal(m_vramAddr);
+      m_vramAddr += (m_reg.ctrl & 0x04) ? 32 : 1;
       break;
   }
   return data;
 }
 
+uint8_t PPU::dmaWrite(uint16_t addr, uint8_t value) {
+  if (addr == 0x4014) {
+    uint16_t cpuPageAddress = static_cast<uint16_t>(value) << 8;
+
+    for (uint32_t i = 0; i < 256; i++) {
+      m_oam[m_oamAddr + i] = m_cpu.readRam(cpuPageAddress + i);
+    }
+  }
+
+  return 1;
+}
+
 uint8_t PPU::cpuWrite(uint16_t addr, uint8_t value) {
   switch ((addr - 0x2000) % 8) {
-    case 0: m_reg_ctrl = value; break;
-    case 1: m_reg_mask = value; break;
+    case 0: m_reg.ctrl = value; break;
+    case 1: m_reg.mask = value; break;
+
+    case 3: m_oamAddr = value; break;
+    case 4: m_oam[m_oamAddr++] = value; break;
 
     case 6:
-      if (m_address_latch == 0) {
-        m_tram_address  = (m_tram_address & 0x00FF) | ((value & 0x3F) << 8);
-        m_address_latch = 1;
+      if (m_addrLatch == 0) {
+        m_tramAddr  = (m_tramAddr & 0x00FF) | ((value & 0x3F) << 8);
+        m_addrLatch = 1;
       } else {
-        m_tram_address  = (m_tram_address & 0xFF00) | value;
-        m_vram_address  = m_tram_address;
-        m_address_latch = 0;
+        m_tramAddr  = (m_tramAddr & 0xFF00) | value;
+        m_vramAddr  = m_tramAddr;
+        m_addrLatch = 0;
       }
       break;
 
     case 7:
-      writeInternal(m_vram_address, value);
-      m_vram_address += (m_reg_ctrl & 0x04) ? 32 : 1;
+      writeInternal(m_vramAddr, value);
+      m_vramAddr += (m_reg.ctrl & 0x04) ? 32 : 1;
       break;
   }
 
@@ -232,12 +149,12 @@ void PPU::pixelEval() {
       uint8_t fineX = m_cycle % 8;
       uint8_t fineY = m_scanline % 8;
 
-      uint16_t nametableBase = 0x2000 + ((m_reg_ctrl & 0x03) * 0x0400);
+      uint16_t nametableBase = 0x2000 + ((m_reg.ctrl & 0x03) * 0x0400);
 
       uint16_t tileAddress = nametableBase + (tileY * 32) + tileX;
       uint8_t  tileID      = readInternal(tileAddress);
 
-      uint16_t patternBase = (m_reg_ctrl & 0x10) ? 0x1000 : 0x0000;
+      uint16_t patternBase = (m_reg.ctrl & 0x10) ? 0x1000 : 0x0000;
 
       uint16_t plane0Address = patternBase + (tileID * 16) + fineY;
       uint8_t  plane0Byte    = readInternal(plane0Address);
@@ -245,6 +162,64 @@ void PPU::pixelEval() {
 
       uint8_t bitShift        = 7 - fineX;
       uint8_t pixelColorIndex = (((plane1Byte >> bitShift) & 0x01) << 1) | ((plane0Byte >> bitShift) & 0x01);
+
+      bool bgEnabled     = (m_reg.mask & 0x08) != 0;
+      bool spriteEnabled = (m_reg.mask & 0x10) != 0;
+
+      if (bgEnabled && spriteEnabled && !(m_reg.status & 0x40)) {
+        uint8_t spriteY     = m_oam[0];
+        uint8_t tileID0     = m_oam[1];
+        uint8_t attributes0 = m_oam[2];
+        uint8_t spriteX     = m_oam[3];
+
+        uint8_t spriteHeight = (m_reg.ctrl & 0x20) ? 16 : 8;
+
+        if (m_scanline >= (spriteY + 1) && m_scanline < (spriteY + 1 + spriteHeight)) {
+          if (m_cycle >= spriteX && m_cycle < (spriteX + 8)) {
+            uint8_t spriteFineY = m_scanline - (spriteY + 1);
+            uint8_t spriteFineX = m_cycle - spriteX;
+
+            if (attributes0 & 0x80) {
+              spriteFineY = (spriteHeight - 1) - spriteFineY;
+            }
+            if (attributes0 & 0x40) {
+              spriteFineX = 7 - spriteFineX;
+            }
+
+            uint16_t sprPatternBase = 0;
+            uint8_t  sprTile        = tileID0;
+
+            if (spriteHeight == 16) {
+              sprPatternBase = (tileID0 & 0x01) ? 0x1000 : 0x0000;
+              sprTile &= 0xFE;
+              if (spriteFineY >= 8) {
+                sprTile |= 0x01;
+                spriteFineY -= 8;
+              }
+            } else {
+              sprPatternBase = (m_reg.ctrl & 0x08) ? 0x1000 : 0x0000;
+            }
+
+            uint16_t sprPlane0Addr = sprPatternBase + (sprTile * 16) + spriteFineY;
+            uint8_t  sprPlane0     = readInternal(sprPlane0Addr);
+            uint8_t  sprPlane1     = readInternal(sprPlane0Addr + 8);
+
+            uint8_t sprBitShift   = 7 - spriteFineX;
+            uint8_t sprColorIndex = (((sprPlane1 >> sprBitShift) & 0x01) << 1) | ((sprPlane0 >> sprBitShift) & 0x01);
+
+            if (sprColorIndex != 0 && pixelColorIndex != 0) {
+              bool clipBG      = !(m_reg.mask & 0x02);
+              bool clipSprites = !(m_reg.mask & 0x04);
+
+              if (!(m_cycle < 8 && (clipBG || clipSprites))) {
+                if (m_cycle < 255) {
+                  m_reg.status |= 0x40;
+                }
+              }
+            }
+          }
+        }
+      }
 
       uint16_t attributeTableBase = nametableBase + 0x03C0;
 
@@ -261,9 +236,7 @@ void PPU::pixelEval() {
 
       uint8_t nesColorByte = readInternal(finalPaletteAddress);
 
-      uint8_t colorIndex = nesColorByte & 0x3F;
-
-      RGB color = NES_SYSTEM_PALETTE[colorIndex];
+      RGB color = NES_SYSTEM_PALETTE[nesColorByte & 0x3F];
 
       m_frame_buffer[(m_scanline * 256) + m_cycle] = 0xFF000000 | (color.r << 16) | (color.g << 8) | color.b;
     }
@@ -271,12 +244,11 @@ void PPU::pixelEval() {
     // NOOP
   } else if (m_scanline >= 241 && m_scanline <= 260) {
     if (m_scanline == 241 && m_cycle == 1) {
-      m_reg_status |= 0x80;
-
-      if (m_reg_ctrl & 0x80) m_cpu.triggerNmi();
+      m_reg.status |= 0x80;
+      if (m_reg.ctrl & 0x80) m_cpu.triggerNmi();
     }
   } else if (m_scanline == 261 && m_cycle == 1) {
-    m_reg_status &= ~0x80;
+    m_reg.status &= ~0xE0;
   }
 }
 
@@ -286,8 +258,8 @@ void PPU::step() {
   if (++m_cycle > 340) {
     m_cycle = 0;
     if (++m_scanline > 261) {
-      m_scanline = 0;
-      saveFramebufferToBmp(m_frame_buffer, "/tmp/test.bmp");
+      m_scanline   = 0;
+      m_frameReady = true;
     }
   }
 }
@@ -296,4 +268,9 @@ void PPU::run(uint8_t cycles) {
   for (uint8_t i = 0; i < cycles; ++i) {
     step();
   }
+}
+
+std::span<uint32_t const> PPU::getFrame() const {
+  m_frameReady = false;
+  return m_frame_buffer;
 }

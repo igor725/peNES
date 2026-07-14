@@ -1,13 +1,12 @@
 #pragma once
 
 #include "ines.hh"
+#include "mmu.hh"
 
 #include <cstdint>
 #include <exception>
 #include <format>
 #include <string>
-
-class PPU;
 
 class IllegalInstruction: public std::exception {
   std::string m_what;
@@ -27,7 +26,7 @@ class UnhandledInstruction: public std::exception {
   const char* what() const noexcept override { return m_what.c_str(); }
 };
 
-class CPU6502 {
+class CPU6502: public MMU {
   union Status {
     struct {
       uint8_t C : 1;
@@ -57,8 +56,6 @@ class CPU6502 {
   public:
   CPU6502();
   ~CPU6502();
-
-  void setPPU(PPU* ppu);
 
   bool loadCartridge(iNES const& c);
 
@@ -100,9 +97,8 @@ class CPU6502 {
     uint8_t  X, Y; // Indices
   } m_regs;
 
-  bool m_verbose, m_nmitriggered;
+  bool    m_verbose, m_nmitriggered;
+  uint8_t m_padButtons, m_padCounter;
 
   uint8_t m_ram[65536];
-
-  PPU* m_ppu;
 };

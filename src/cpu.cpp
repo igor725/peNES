@@ -1,17 +1,12 @@
 #include "cpu.hh"
 
 #include "cpu_table.hh"
-#include "ppu.hh"
 
 #include <iostream>
 
 CPU6502::CPU6502() {}
 
 CPU6502::~CPU6502() {}
-
-void CPU6502::setPPU(PPU* ppu) {
-  m_ppu = ppu;
-}
 
 bool CPU6502::loadCartridge(iNES const& c) {
   c.copyPRG(&m_ram[0x8000]);
@@ -22,6 +17,8 @@ bool CPU6502::loadCartridge(iNES const& c) {
 void CPU6502::reset() {
   m_verbose      = false;
   m_nmitriggered = false;
+  m_padButtons   = 0;
+  m_padCounter   = 0;
   m_regs.P._raw  = 1;
   m_regs.P.I     = true;
   m_regs.P.D     = false;
@@ -358,11 +355,29 @@ uint8_t CPU6502::step() {
       m_regs.A   = res & 0xFF;
       updated |= _uacc;
     } break;
+    case 0x75: { // ADC zp,X
+      uint8_t  operand = readRam(static_cast<uint8_t>(inst->operand + m_regs.X));
+      uint16_t res     = m_regs.A + operand + (m_regs.P.C ? 1 : 0);
+
+      m_regs.P.C = res > 0xFF;
+      m_regs.P.V = (~(m_regs.A ^ operand) & (m_regs.A ^ res) & 0x80) != 0x00;
+      m_regs.A   = res & 0xFF;
+      updated |= _uacc;
+    } break;
     case 0x78: { // SEI
       m_regs.P.I = true;
     } break;
     case 0x79: { // ADC abs,Y
       uint8_t  operand = readRam(inst->operandw + m_regs.Y);
+      uint16_t res     = m_regs.A + operand + (m_regs.P.C ? 1 : 0);
+
+      m_regs.P.C = res > 0xFF;
+      m_regs.P.V = (~(m_regs.A ^ operand) & (m_regs.A ^ res) & 0x80) != 0x00;
+      m_regs.A   = res & 0xFF;
+      updated |= _uacc;
+    } break;
+    case 0x7D: { // ADC abs,X
+      uint8_t  operand = readRam(inst->operandw + m_regs.X);
       uint16_t res     = m_regs.A + operand + (m_regs.P.C ? 1 : 0);
 
       m_regs.P.C = res > 0xFF;
@@ -720,6 +735,16 @@ uint8_t CPU6502::step() {
     } break;
     case 0xEA: { // NOP
     } break;
+    case 0xED: { // SBC abs
+      uint8_t  inverted_value = ~readRam(inst->operandw);
+      uint16_t carry_in       = m_regs.P.C ? 1 : 0;
+      uint16_t res            = m_regs.A + inverted_value + carry_in;
+
+      m_regs.P.V = ((m_regs.A ^ res) & (inverted_value ^ res) & 0x80) != 0;
+      m_regs.P.C = res > 0xFF;
+      m_regs.A   = res & 0xFF;
+      updated |= _uacc;
+    } break;
     case 0xEE: { // INC
       auto res = writeRam(inst->operandw, readRam(inst->operandw) + 1);
 
@@ -735,6 +760,16 @@ uint8_t CPU6502::step() {
           cycles += 1;
         }
       }
+    } break;
+    case 0xF5: { // SBC zp,X
+      uint8_t  inverted_value = ~readRam(static_cast<uint8_t>(inst->operand + m_regs.X));
+      uint16_t carry_in       = m_regs.P.C ? 1 : 0;
+      uint16_t res            = m_regs.A + inverted_value + carry_in;
+
+      m_regs.P.V = ((m_regs.A ^ res) & (inverted_value ^ res) & 0x80) != 0;
+      m_regs.P.C = res > 0xFF;
+      m_regs.A   = res & 0xFF;
+      updated |= _uacc;
     } break;
     case 0xF6: { // INC zp,X
       auto addr = static_cast<uint8_t>(inst->operand + m_regs.X);
@@ -799,11 +834,15 @@ void CPU6502::triggerNmi() {
 }
 
 uint8_t CPU6502::writeRam(uint16_t addr, uint8_t value) {
-  if (addr >= 0x2000 && addr <= 0x2007) m_ppu->cpuWrite(addr, value);
+  if (auto handler = findHandler(addr); isValidHandler(handler)) {
+    return handler->second(true, addr, value);
+  }
   return m_ram[addr] = value;
 }
 
 uint8_t CPU6502::readRam(uint16_t addr) const {
-  if (addr >= 0x2000 && addr <= 0x2007) return m_ppu->cpuRead(addr);
+  if (auto handler = findHandler(addr); isValidHandler(handler)) {
+    return handler->second(false, addr, 0);
+  }
   return m_ram[addr];
 }

@@ -2,19 +2,149 @@
 #include "ines.hh"
 #include "ppu.hh"
 
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_error.h>
+#include <SDL3/SDL_events.h>
+#include <SDL3/SDL_gamepad.h>
+#include <SDL3/SDL_init.h>
+#include <SDL3/SDL_log.h>
+#include <SDL3/SDL_oldnames.h>
+#include <SDL3/SDL_pixels.h>
+#include <SDL3/SDL_render.h>
+#include <SDL3/SDL_surface.h>
+#include <SDL3/SDL_video.h>
 #include <cassert>
+#include <iostream>
 
 int main(int argc, char* argv[]) {
+  if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
+    std::cerr << "Failed to initialize SDL: " << SDL_GetError() << std::endl;
+    return 1;
+  }
+
+  auto window = SDL_CreateWindow("peNES", 800, 600, 0);
+  auto rend   = SDL_CreateRenderer(window, nullptr);
+  auto tex    = SDL_CreateTexture(rend, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 256, 240);
+  SDL_SetRenderVSync(rend, 1);
+
   iNES cartridge(argv[1]);
-  assert(cartridge.isNTSC());
+  if (!cartridge.isNTSC()) {
+    std::cerr << "Only NTSC cartridges are supported atm" << std::endl;
+    return 2;
+  }
   CPU6502 cpu;
-  assert(cpu.loadCartridge(cartridge));
+  if (!cpu.loadCartridge(cartridge)) {
+    std::cerr << "Failed to load data from cartridge into CPU" << std::endl;
+    return 3;
+  }
   PPU ppu(cpu, cartridge);
 
-  while (true) {
-    auto cycles = cpu.step();
-    if (cycles >= 1) ppu.run(cycles * 3);
+  union PadState {
+    struct {
+      uint8_t a      : 1;
+      uint8_t b      : 1;
+      uint8_t select : 1;
+      uint8_t start  : 1;
+      uint8_t up     : 1;
+      uint8_t down   : 1;
+      uint8_t left   : 1;
+      uint8_t right  : 1;
+    };
+
+    uint8_t _raw;
+
+    uint8_t getFirstBtnState() const { return a; }
+
+    uint8_t shift() {
+      uint8_t ret = _raw & 0x01;
+      _raw >>= 1;
+      _raw |= 0x80;
+      return ret;
+    }
+  };
+
+  PadState padBtns[2], padShift[2];
+
+  cpu.addRangeHandler({0x2000, 0x2007}, [&](bool isWrite, uint16_t addr, uint8_t value) -> uint8_t {
+    if (isWrite) return ppu.cpuWrite(addr, value);
+    return ppu.cpuRead(addr);
+  });
+
+  cpu.addRangeHandler({0x4014, 0x4014}, [&](bool isWrite, uint16_t addr, uint8_t value) -> uint8_t {
+    if (isWrite) return ppu.dmaWrite(addr, value);
+    return value;
+  });
+
+  cpu.addRangeHandler({0x4016, 0x4017}, [&padBtns, &padShift, latch = false](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
+    if (isWrite) {
+      if (addr == 0x4016) {
+        if ((latch = (value & 0x01)) == 0x01) {
+          padShift[0] = padBtns[0];
+          padShift[1] = padBtns[1];
+        }
+      }
+
+      return value;
+    }
+
+    auto const pNum = addr == 0x4016 ? 0 : 1;
+    if (latch) {
+      return padBtns[pNum].getFirstBtnState();
+    } else {
+      return padShift[pNum].shift();
+    }
+
+    return value;
+  });
+
+  bool firstStep = true, stopped = false;
+  while (!stopped) {
+    while (!ppu.isFrameReady()) {
+      auto cycles = cpu.step();
+      if (cycles >= 1) ppu.run(cycles * 3);
+    }
+    auto frame = ppu.getFrame();
+    SDL_UpdateTexture(tex, nullptr, frame.data(), 256 * 4);
+    SDL_RenderClear(rend);
+    SDL_RenderTexture(rend, tex, nullptr, nullptr);
+    SDL_RenderPresent(rend);
+
+    SDL_Event ev;
+    while (SDL_PollEvent(&ev)) {
+      switch (ev.type) {
+        case SDL_EVENT_WINDOW_CLOSE_REQUESTED: {
+          stopped = true;
+        } break;
+        case SDL_EVENT_GAMEPAD_ADDED: {
+          if (SDL_IsGamepad(ev.gdevice.which)) {
+            SDL_OpenGamepad(ev.gdevice.which);
+          }
+        } break;
+        case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+        case SDL_EVENT_GAMEPAD_BUTTON_UP: {
+          switch (ev.gbutton.button) {
+            case SDL_GAMEPAD_BUTTON_DPAD_LEFT: padBtns[0].left = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: padBtns[0].right = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_DPAD_UP: padBtns[0].up = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_DPAD_DOWN: padBtns[0].down = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_LABEL_A: padBtns[0].a = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_LABEL_B: padBtns[0].b = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_BACK: padBtns[0].select = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_START: padBtns[0].start = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+          }
+        } break;
+      }
+    }
+
+    if (firstStep) { // Show window after first rendering step is complete
+      firstStep = false;
+      SDL_ShowWindow(window);
+    }
   }
+  SDL_DestroyTexture(tex);
+  SDL_DestroyRenderer(rend);
+  SDL_DestroyWindow(window);
+  SDL_Quit();
 
   return 0;
 }

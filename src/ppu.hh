@@ -3,6 +3,7 @@
 #include "cpu.hh"
 #include "ines.hh"
 
+#include <SDL3/SDL_stdinc.h>
 #include <cstdint>
 
 class PPU {
@@ -12,8 +13,12 @@ class PPU {
 
   uint8_t cpuRead(uint16_t addr);
   uint8_t cpuWrite(uint16_t addr, uint8_t value);
+  uint8_t dmaWrite(uint16_t addr, uint8_t value);
 
-  void run(uint8_t cycles);
+  void                      run(uint8_t cycles);
+  std::span<uint32_t const> getFrame() const;
+
+  bool isFrameReady() const { return m_frameReady; };
 
   protected:
   uint16_t getNametableMirroringOffset(uint16_t address);
@@ -28,17 +33,23 @@ class PPU {
 
   uint8_t m_vram[2048];
   uint8_t m_palette[32];
+  uint8_t m_oam[256] = {0};
 
-  uint8_t m_reg_ctrl   = 0;
-  uint8_t m_reg_mask   = 0;
-  uint8_t m_reg_status = 0;
+  struct {
+    uint8_t ctrl   = 0;
+    uint8_t mask   = 0;
+    uint8_t status = 0;
+  } m_reg;
 
-  uint16_t m_vram_address  = 0;
-  uint16_t m_tram_address  = 0;
-  uint8_t  m_address_latch = 0;
-  uint8_t  m_read_buffer   = 0;
+  uint8_t  m_oamAddr   = 0;
+  uint16_t m_vramAddr  = 0;
+  uint16_t m_tramAddr  = 0;
+  uint8_t  m_addrLatch = 0;
+  uint8_t  m_readBuff  = 0;
 
   uint16_t m_cycle, m_scanline;
 
   uint32_t m_frame_buffer[256 * 240];
+
+  mutable bool m_frameReady;
 };
