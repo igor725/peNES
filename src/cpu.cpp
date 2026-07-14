@@ -13,7 +13,7 @@ void CPU6502::reset() {
   m_regs.P._raw  = 1;
   m_regs.P.I     = true;
   m_regs.P.D     = false;
-  m_regs.S       = 0xFF;
+  m_regs.SP      = 0xFF;
   m_regs.PC      = readRam<uint16_t>(0xFFFC);
 }
 
@@ -528,7 +528,7 @@ uint8_t CPU6502::handleShift(Instruction inst) {
         value = readRamByte(static_cast<uint8_t>(readPC<uint8_t>() + m_regs.Y));
         cycles += 3;
       } else if (inst.getAddrMode() == 0x06) /* TSX */ {
-        value = m_regs.S;
+        value = m_regs.SP;
         cycles += 1;
       } else if (inst.getAddrMode() == 0x07) /* LDX abs,Y */ {
         auto const operand = readPC<uint16_t>();
@@ -562,7 +562,7 @@ uint8_t CPU6502::handleShift(Instruction inst) {
         writeRamByte(readPC<uint16_t>(), m_regs.X);
         return 4;
       } else if (inst.getAddrMode() == 0x06) /* TXS */ {
-        m_regs.S = m_regs.X;
+        m_regs.SP = m_regs.X;
         return 2;
       }
     } break;

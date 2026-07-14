@@ -2,6 +2,7 @@
 
 #include "mmu.hh"
 
+#include <array>
 #include <cstdint>
 #include <exception>
 #include <format>
@@ -73,7 +74,7 @@ class CPU6502: public MMU {
   void pushStack(T val) {
     static_assert(std::is_integral_v<T> && sizeof(T) <= 2);
     if constexpr (sizeof(T) == 1) {
-      m_ram[0x100 + m_regs.S--] = val;
+      m_ram[0x100 + m_regs.SP--] = val;
     } else if constexpr (sizeof(T) == 2) {
       pushStack<uint8_t>((val >> 8) & 0xFF);
       pushStack<uint8_t>(val & 0xFF);
@@ -84,7 +85,7 @@ class CPU6502: public MMU {
   T popStack() {
     static_assert(std::is_integral_v<T> && sizeof(T) <= 2);
     if constexpr (sizeof(T) == 1) {
-      return m_ram[0x100 | ++m_regs.S];
+      return m_ram[0x100 | ++m_regs.SP];
     } else if constexpr (sizeof(T) == 2) {
       auto _low  = popStack<uint8_t>();
       auto _high = popStack<uint8_t>();
@@ -129,12 +130,12 @@ class CPU6502: public MMU {
     uint8_t  A;    // Accumulator
     Status   P;    // Processor status
     uint16_t PC;   // Program counter
-    uint8_t  S;    // Stack pointer
+    uint8_t  SP;   // Stack pointer
     uint8_t  X, Y; // Indices
   } m_regs;
 
   bool    m_nmitriggered;
   uint8_t m_padButtons, m_padCounter;
 
-  uint8_t m_ram[0x8000];
+  std::array<uint8_t, 0x8000> m_ram;
 };
