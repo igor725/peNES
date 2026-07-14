@@ -28,16 +28,12 @@ int main(int argc, char* argv[]) {
   SDL_SetRenderVSync(rend, 1);
 
   iNES cartridge(argv[1]);
-  if (!cartridge.isNTSC()) {
+  if (!cartridge.get()->isNTSC()) {
     std::cerr << "Only NTSC cartridges are supported atm" << std::endl;
     return 2;
   }
   CPU6502 cpu;
-  if (!cpu.loadCartridge(cartridge)) {
-    std::cerr << "Failed to load data from cartridge into CPU" << std::endl;
-    return 3;
-  }
-  PPU ppu(cpu, cartridge);
+  PPU     ppu(cpu, cartridge);
 
   union PadState {
     struct {
@@ -65,16 +61,32 @@ int main(int argc, char* argv[]) {
 
   PadState padBtns[2], padShift[2];
 
+  // PPU handler
   cpu.addRangeHandler({0x2000, 0x2007}, [&](bool isWrite, uint16_t addr, uint8_t value) -> uint8_t {
     if (isWrite) return ppu.cpuWrite(addr, value);
     return ppu.cpuRead(addr);
   });
 
+  // PPU DMA handler
   cpu.addRangeHandler({0x4014, 0x4014}, [&](bool isWrite, uint16_t addr, uint8_t value) -> uint8_t {
     if (isWrite) return ppu.dmaWrite(addr, value);
     return value;
   });
 
+  // PPU CHR handler
+  ppu.addRangeHandler({0x0000, 0x1FFF}, [&, chr = nullptr](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
+    auto const romAddr = cartridge.resolvePPU(addr);
+    if (romAddr == 0) /* No CHR data in cartridge */ {
+      static auto chrRam = new uint8_t[0x2000];
+      if (isWrite) return chrRam[addr] = value;
+      return chrRam[addr];
+    }
+
+    // Skip all writes
+    return cartridge->data[romAddr];
+  });
+
+  // Gamepad handler
   cpu.addRangeHandler({0x4016, 0x4017}, [&padBtns, &padShift, latch = false](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
     if (isWrite) {
       if (addr == 0x4016) {
@@ -97,7 +109,15 @@ int main(int argc, char* argv[]) {
     return value;
   });
 
-  bool firstStep = true, stopped = false;
+  // PRG-ROM handler
+  cpu.addRangeHandler({0x8000, 0xFFFF}, [&](bool isWrite, uint16_t addr, uint8_t value) -> uint8_t {
+    // We're ignoring writes here completely
+    auto const romAddr = cartridge.resolveCPU(addr);
+    return cartridge->data[romAddr];
+  });
+  cpu.reset();
+
+  bool stopped = false;
   while (!stopped) {
     while (!ppu.isFrameReady()) {
       auto cycles = cpu.step();
@@ -134,11 +154,6 @@ int main(int argc, char* argv[]) {
           }
         } break;
       }
-    }
-
-    if (firstStep) { // Show window after first rendering step is complete
-      firstStep = false;
-      SDL_ShowWindow(window);
     }
   }
   SDL_DestroyTexture(tex);

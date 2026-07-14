@@ -29,7 +29,7 @@ PPU::~PPU() {}
 uint16_t PPU::getNametableMirroringOffset(uint16_t address) {
   uint16_t normalized = address - 0x2000;
 
-  if (m_cartridge.isVerticalMirror()) {
+  if (m_cartridge.get()->isVerticalMirror()) {
     return normalized % 1024 + (normalized >= 1024 && normalized < 2048 ? 1024 : 0) + (normalized >= 3072 ? 1024 : 0);
   } else {
     if (normalized < 2048) {
@@ -42,10 +42,11 @@ uint16_t PPU::getNametableMirroringOffset(uint16_t address) {
 
 uint8_t PPU::readInternal(uint16_t addr) {
   addr &= 0x3FFF;
+  if (auto it = findHandler(addr); isValidHandler(it)) {
+    return it->second(false, addr, 0);
+  }
 
-  if (addr >= 0x0000 && addr <= 0x1FFF) {
-    return m_cartridge.readChr(addr);
-  } else if (addr >= 0x2000 && addr <= 0x3EFF) {
+  if (addr >= 0x2000 && addr <= 0x3EFF) {
     uint16_t nt_address = addr;
     if (nt_address >= 0x3000) nt_address -= 0x1000;
     uint16_t vram_offset = getNametableMirroringOffset(nt_address);
@@ -61,10 +62,12 @@ uint8_t PPU::readInternal(uint16_t addr) {
 
 void PPU::writeInternal(uint16_t addr, uint8_t value) {
   addr &= 0x3FFF;
+  if (auto it = findHandler(addr); isValidHandler(it)) {
+    it->second(true, addr, value);
+    return;
+  }
 
-  if (addr >= 0x0000 && addr <= 0x1FFF) {
-    m_cartridge.writeChr(addr, value);
-  } else if (addr >= 0x2000 && addr <= 0x3EFF) {
+  if (addr >= 0x2000 && addr <= 0x3EFF) {
     uint16_t nt_address = addr;
     if (nt_address >= 0x3000) {
       nt_address -= 0x1000;
@@ -105,7 +108,7 @@ uint8_t PPU::dmaWrite(uint16_t addr, uint8_t value) {
     uint16_t cpuPageAddress = static_cast<uint16_t>(value) << 8;
 
     for (uint32_t i = 0; i < 256; i++) {
-      m_oam[m_oamAddr + i] = m_cpu.readRam(cpuPageAddress + i);
+      m_oam[m_oamAddr + i] = m_cpu.readRam<uint8_t>(cpuPageAddress + i);
     }
   }
 

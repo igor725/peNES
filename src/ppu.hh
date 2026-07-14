@@ -2,11 +2,12 @@
 
 #include "cpu.hh"
 #include "ines.hh"
+#include "mmu.hh"
 
 #include <SDL3/SDL_stdinc.h>
 #include <cstdint>
 
-class PPU {
+class PPU: public MMU {
   public:
   PPU(CPU6502& c, iNES& i);
   ~PPU();

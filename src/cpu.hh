@@ -1,6 +1,5 @@
 #pragma once
 
-#include "ines.hh"
 #include "mmu.hh"
 
 #include <cstdint>
@@ -42,22 +41,33 @@ class CPU6502: public MMU {
     uint8_t _raw;
   };
 
-  struct [[gnu::packed]] Instruction {
-    uint8_t opcode;
+  enum class InstClass : uint8_t {
+    Control,
+    Math,
+    Shift,
+  };
 
-    union {
-      int8_t   s_operand;
-      int16_t  s_operandw;
-      uint8_t  operand;
-      uint16_t operandw;
-    };
+  union [[gnu::packed]] Instruction {
+    struct {
+      InstClass instclass : 2;
+      uint8_t   addrmode  : 3;
+      uint8_t   operation : 3;
+    } deflt;
+
+    struct {
+      uint8_t sig  : 5;
+      uint8_t cond : 1;
+      uint8_t sel  : 2;
+    } branch;
+
+    uint8_t raw;
+
+    uint8_t getAddrMode() const { return deflt.addrmode; }
   };
 
   public:
   CPU6502();
   ~CPU6502();
-
-  bool loadCartridge(iNES const& c);
 
   template <typename T>
   void pushStack(T val) {
@@ -85,8 +95,34 @@ class CPU6502: public MMU {
   void    reset();
   uint8_t step();
   void    triggerNmi();
-  uint8_t writeRam(uint16_t addr, uint8_t value);
-  uint8_t readRam(uint16_t addr) const;
+
+  template <typename T>
+  T readRam(uint16_t addr) const {
+    static_assert(std::is_integral_v<T> && sizeof(T) <= 2);
+
+    if constexpr (sizeof(T) == 1) {
+      return static_cast<T>(readRamByte(addr));
+    } else if constexpr (sizeof(T) == 2) {
+      if (addr == 0xFFFF) throw;
+      auto _low  = readRamByte(addr);
+      auto _high = readRamByte(addr + 1);
+      return static_cast<T>((_high << 8) | _low);
+    }
+  }
+
+  template <typename T>
+  T readPC() {
+    auto orig = m_regs.PC;
+    m_regs.PC += sizeof(T);
+    return readRam<T>(orig);
+  }
+
+  protected:
+  uint8_t handleControl(Instruction inst);
+  uint8_t handleMath(Instruction inst);
+  uint8_t handleShift(Instruction inst);
+  uint8_t writeRamByte(uint16_t addr, uint8_t value);
+  uint8_t readRamByte(uint16_t addr) const;
 
   private:
   struct {
@@ -97,8 +133,8 @@ class CPU6502: public MMU {
     uint8_t  X, Y; // Indices
   } m_regs;
 
-  bool    m_verbose, m_nmitriggered;
+  bool    m_nmitriggered;
   uint8_t m_padButtons, m_padCounter;
 
-  uint8_t m_ram[65536];
+  uint8_t m_ram[0x8000];
 };

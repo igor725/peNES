@@ -11,8 +11,8 @@ class MMU {
   using Handler  = std::function<uint8_t(bool isWrite, uint16_t addr, uint8_t value)>;
   using List     = std::list<std::pair<Interval, Handler>>;
 
-  MMU()  = default;
-  ~MMU() = default;
+  MMU()          = default;
+  virtual ~MMU() = default;
 
   void                 addRangeHandler(Interval memRange, Handler han);
   List::const_iterator findHandler(uint16_t address) const;

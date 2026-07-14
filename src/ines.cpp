@@ -11,27 +11,16 @@ iNES::iNES(const char* filename) {
   struct stat sb;
   if (::fstat(file, &sb) == -1) throw 2;
 
-  size_t max_size = sb.st_size + 0x2000;
-
-  void* total_alloc = ::mmap(nullptr, max_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  if (total_alloc == MAP_FAILED) {
+  m_file = static_cast<File*>(::mmap(nullptr, sb.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, file, 0));
+  if (m_file == MAP_FAILED) {
     ::close(file);
-    throw 3;
+    throw;
   }
-
-  void* file_map = ::mmap(total_alloc, sb.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_FIXED, file, 0);
-  if (file_map == MAP_FAILED) {
-    ::munmap(total_alloc, max_size);
-    ::close(file);
-    throw 3;
-  }
-
-  m_file = static_cast<File*>(total_alloc);
 
   if (!m_file->validate(sb.st_size)) {
-    ::munmap(m_file, max_size);
+    ::munmap(m_file, sb.st_size);
     ::close(file);
-    throw 4;
+    throw;
   }
 
   ::close(file);
