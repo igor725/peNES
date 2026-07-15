@@ -3,18 +3,10 @@
 #include "ppu.hh"
 
 #include <SDL3/SDL.h>
-#include <SDL3/SDL_error.h>
-#include <SDL3/SDL_events.h>
-#include <SDL3/SDL_gamepad.h>
-#include <SDL3/SDL_init.h>
-#include <SDL3/SDL_log.h>
-#include <SDL3/SDL_oldnames.h>
-#include <SDL3/SDL_pixels.h>
-#include <SDL3/SDL_render.h>
-#include <SDL3/SDL_surface.h>
-#include <SDL3/SDL_video.h>
 #include <cassert>
 #include <iostream>
+
+constexpr double TARGET_FRAMETIME = 1.0 / 60.0988;
 
 int main(int argc, char* argv[]) {
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
@@ -123,44 +115,57 @@ int main(int argc, char* argv[]) {
   if (cartridge->isVerticalMirror()) ppu.setVerticalMirroring();
   cpu.reset();
 
-  bool stopped = false;
+  auto       lastTime = SDL_GetPerformanceCounter();
+  auto const perfFreq = static_cast<double>(SDL_GetPerformanceFrequency());
+
+  bool   stopped    = false;
+  double nextUpdate = 0.0, lag = 0.0;
   while (!stopped) {
-    while (!ppu.isFrameReady()) {
-      auto cycles = cpu.step();
-      if (cycles >= 1) ppu.run(cycles * 3);
+    Uint64 currentTime = SDL_GetPerformanceCounter();
+    lag += static_cast<double>(currentTime - lastTime) / SDL_GetPerformanceFrequency();
+    lastTime = currentTime;
+
+    while (lag >= TARGET_FRAMETIME) {
+      while (!ppu.isFrameReady()) {
+        auto cycles = cpu.step();
+        if (cycles >= 1) ppu.run(cycles * 3);
+      }
+
+      SDL_Event ev;
+      while (SDL_PollEvent(&ev)) {
+        switch (ev.type) {
+          case SDL_EVENT_WINDOW_CLOSE_REQUESTED: {
+            stopped = true;
+          } break;
+          case SDL_EVENT_GAMEPAD_ADDED: {
+            if (SDL_IsGamepad(ev.gdevice.which)) {
+              SDL_OpenGamepad(ev.gdevice.which);
+            }
+          } break;
+          case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+          case SDL_EVENT_GAMEPAD_BUTTON_UP: {
+            switch (ev.gbutton.button) {
+              case SDL_GAMEPAD_BUTTON_DPAD_LEFT: padBtns[0].left = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+              case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: padBtns[0].right = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+              case SDL_GAMEPAD_BUTTON_DPAD_UP: padBtns[0].up = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+              case SDL_GAMEPAD_BUTTON_DPAD_DOWN: padBtns[0].down = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+              case SDL_GAMEPAD_BUTTON_LABEL_A: padBtns[0].a = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+              case SDL_GAMEPAD_BUTTON_LABEL_B: padBtns[0].b = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+              case SDL_GAMEPAD_BUTTON_BACK: padBtns[0].select = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+              case SDL_GAMEPAD_BUTTON_START: padBtns[0].start = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            }
+          } break;
+        }
+      }
+
+      lag -= TARGET_FRAMETIME;
     }
+
     auto frame = ppu.getFrame();
     SDL_UpdateTexture(tex, nullptr, frame.data(), 256 * 4);
     SDL_RenderClear(rend);
     SDL_RenderTexture(rend, tex, nullptr, nullptr);
     SDL_RenderPresent(rend);
-
-    SDL_Event ev;
-    while (SDL_PollEvent(&ev)) {
-      switch (ev.type) {
-        case SDL_EVENT_WINDOW_CLOSE_REQUESTED: {
-          stopped = true;
-        } break;
-        case SDL_EVENT_GAMEPAD_ADDED: {
-          if (SDL_IsGamepad(ev.gdevice.which)) {
-            SDL_OpenGamepad(ev.gdevice.which);
-          }
-        } break;
-        case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
-        case SDL_EVENT_GAMEPAD_BUTTON_UP: {
-          switch (ev.gbutton.button) {
-            case SDL_GAMEPAD_BUTTON_DPAD_LEFT: padBtns[0].left = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: padBtns[0].right = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            case SDL_GAMEPAD_BUTTON_DPAD_UP: padBtns[0].up = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            case SDL_GAMEPAD_BUTTON_DPAD_DOWN: padBtns[0].down = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            case SDL_GAMEPAD_BUTTON_LABEL_A: padBtns[0].a = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            case SDL_GAMEPAD_BUTTON_LABEL_B: padBtns[0].b = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            case SDL_GAMEPAD_BUTTON_BACK: padBtns[0].select = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            case SDL_GAMEPAD_BUTTON_START: padBtns[0].start = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-          }
-        } break;
-      }
-    }
   }
   SDL_DestroyTexture(tex);
   SDL_DestroyRenderer(rend);

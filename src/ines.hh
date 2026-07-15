@@ -60,27 +60,8 @@ class iNES {
 
   auto operator->() const { return m_file; }
 
-  uint16_t resolveCPU(uint16_t addr) const {
-    if (addr >= 0x8000 /* Start of PRG */) {
-      addr -= 0x8000;
-      if (m_file->hdr.prg_size == 1) addr %= PRG_BLOCK_SIZE; // Mirror PRG if only one bank available
-      if (m_file->hdr.flags6.trainer) addr += TRAINER_BLOCK_SIZE;
-      return addr;
-    }
-
-    throw;
-  }
-
-  uint16_t resolvePPU(uint16_t addr) {
-    if (addr <= 0x1FFF /* End of CHR */) {
-      if (m_file->hdr.chr_size == 0) return 0;
-      addr += m_file->hdr.prg_size * PRG_BLOCK_SIZE;
-      if (m_file->hdr.flags6.trainer) addr += TRAINER_BLOCK_SIZE;
-      return addr;
-    }
-
-    throw;
-  }
+  uint16_t resolveCPU(uint16_t addr) const;
+  uint16_t resolvePPU(uint16_t addr) const;
 
   private:
   File* m_file;

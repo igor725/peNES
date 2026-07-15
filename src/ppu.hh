@@ -5,7 +5,6 @@
 #include "mmu.hh"
 #include "palette.hh"
 
-#include <SDL3/SDL_stdinc.h>
 #include <cstdint>
 
 class PPU: public MMU {
