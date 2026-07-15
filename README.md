@@ -5,8 +5,9 @@ The initial plan was to get it going within one day which I did successfully. Th
 
 > [!WARNING]  
 > The PPU is currently suffering around the same issues as my first emulator did because I still have to read a lot of those documentations on it to actually fix the thing.
-> Also the APU is completely missing which could cause numerous issues in synchronization and applications execution in general.
-> CPU is egregiously inaccurate too, it has a lot of lingering bugs yet still manages to run some games like SMB and Duck Hunt.
+> Also the APU is completely missing which could cause numerous issues in synchronization and applications execution in general. CPU is egregiously inaccurate too, it has
+> a lot of lingering bugs yet still manages to run some games like SMB and Duck Hunt. On top of that some CPU instructions are completely missing since I was adding them
+> on as games were executing them. Approximately 90% of official instructions is already implemented, I think... Never actually counted them.
 
 ## Screenshots
 [<img src="./screenshots/scr1.png">](./screenshots/scr1.png)

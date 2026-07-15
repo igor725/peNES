@@ -145,7 +145,7 @@ uint8_t PPU::cpuWrite(uint16_t addr, uint8_t value) {
 
 void PPU::pixelEval() {
   if (m_scanline >= 0 && m_scanline <= 239) {
-    if (m_cycle >= 0 && m_cycle <= 255) {
+    if (m_cycle <= 255) {
       uint16_t tileX = m_cycle / 8;
       uint16_t tileY = m_scanline / 8;
 
