@@ -533,7 +533,19 @@ uint8_t CPU6502::handleShift(Instruction inst) {
     } break;
     case 0x03: {
       if (inst.getAddrMode() == 0x00) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x01) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x01) /* ROR zp */ {
+        uint16_t target_addr = readPC<uint8_t>();
+
+        uint8_t value = readRamByte(target_addr);
+
+        uint8_t incoming_carry = m_regs.P.C ? 0x80 : 0x00;
+        uint8_t shifted_value  = (value >> 1) | incoming_carry;
+        m_regs.P.C             = (value & 0x01) != 0;
+
+        writeRamByte(target_addr, shifted_value);
+        m_regs.P.Z = (shifted_value == 0);
+        m_regs.P.N = (shifted_value & 0x80) != 0;
+        return 5;
       } else if (inst.getAddrMode() == 0x02) /* ROR A */ {
         uint8_t incoming_carry = m_regs.P.C ? 0x80 : 0x00;
         uint8_t shifted_value  = (m_regs.A >> 1) | incoming_carry;
@@ -543,7 +555,19 @@ uint8_t CPU6502::handleShift(Instruction inst) {
         m_regs.P.Z = (shifted_value == 0);
         m_regs.P.N = (shifted_value & 0x80) != 0;
         return 2;
-      } else if (inst.getAddrMode() == 0x03) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x03) /* ROR abs */ {
+        uint16_t target_addr = readPC<uint16_t>();
+
+        uint8_t value = readRamByte(target_addr);
+
+        uint8_t incoming_carry = m_regs.P.C ? 0x80 : 0x00;
+        uint8_t shifted_value  = (value >> 1) | incoming_carry;
+        m_regs.P.C             = (value & 0x01) != 0;
+
+        writeRamByte(target_addr, shifted_value);
+        m_regs.P.Z = (shifted_value == 0);
+        m_regs.P.N = (shifted_value & 0x80) != 0;
+        return 6;
       } else if (inst.getAddrMode() == 0x04) /* ??? */ {
       } else if (inst.getAddrMode() == 0x05) /* ??? */ {
       } else if (inst.getAddrMode() == 0x06) /* ??? */ {

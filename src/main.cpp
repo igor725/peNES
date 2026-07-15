@@ -32,6 +32,10 @@ int main(int argc, char* argv[]) {
     std::cerr << "Only NTSC cartridges are supported atm" << std::endl;
     return 2;
   }
+  if (cartridge->getMapperId() != 0x00) {
+    std::cerr << "Only Mapper 0 cartridges are supported atm" << std::endl;
+    return 3;
+  }
   CPU6502 cpu;
   PPU     ppu(cpu, cartridge);
 
