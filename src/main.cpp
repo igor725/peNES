@@ -15,18 +15,30 @@ int main(int argc, char* argv[]) {
   }
 
   auto window = SDL_CreateWindow("peNES", 800, 600, 0);
-  auto rend   = SDL_CreateRenderer(window, nullptr);
-  auto tex    = SDL_CreateTexture(rend, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 256, 240);
+  if (window == nullptr) {
+    std::cerr << "Failed to create a window" << SDL_GetError() << std::endl;
+    return 2;
+  }
+  auto rend = SDL_CreateRenderer(window, nullptr);
+  if (rend == nullptr) {
+    std::cerr << "Failed to create a renderer" << SDL_GetError() << std::endl;
+    return 3;
+  }
+  auto tex = SDL_CreateTexture(rend, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 256, 240);
+  if (tex == nullptr) {
+    std::cerr << "Failed to create a texture" << SDL_GetError() << std::endl;
+    return 4;
+  }
   SDL_SetRenderVSync(rend, 1);
 
   iNES cartridge(argv[1]);
   if (!cartridge.get()->isNTSC()) {
     std::cerr << "Only NTSC cartridges are supported atm" << std::endl;
-    return 2;
+    return 5;
   }
   if (cartridge->getMapperId() != 0x00) {
     std::cerr << "Only Mapper 0 cartridges are supported atm" << std::endl;
-    return 3;
+    return 6;
   }
   CPU6502 cpu;
   PPU     ppu(cpu, cartridge);
@@ -58,7 +70,7 @@ int main(int argc, char* argv[]) {
   PadState padBtns[2], padShift[2];
 
   // PPU handler
-  cpu.addRangeHandler({0x2000, 0x2007}, [&](bool isWrite, uint16_t addr, uint8_t value) -> uint8_t {
+  cpu.addRangeHandler({0x2000, 0x3FFF}, [&](bool isWrite, uint16_t addr, uint8_t value) -> uint8_t {
     if (isWrite) return ppu.cpuWrite(addr, value);
     return ppu.cpuRead(addr);
   });

@@ -766,6 +766,7 @@ void CPU6502::triggerNmi() {
 }
 
 uint8_t CPU6502::writeRamByte(uint16_t addr, uint8_t value) {
+  if (addr <= 0x1FFF) addr &= 0x7ff;
   if (auto handler = findHandler(addr); isValidHandler(handler)) {
     return handler->second(true, addr, value);
   }
@@ -773,6 +774,7 @@ uint8_t CPU6502::writeRamByte(uint16_t addr, uint8_t value) {
 }
 
 uint8_t CPU6502::readRamByte(uint16_t addr) const {
+  if (addr <= 0x1FFF) addr &= 0x7ff;
   if (auto handler = findHandler(addr); isValidHandler(handler)) {
     return handler->second(false, addr, 0);
   }

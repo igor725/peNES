@@ -30,7 +30,7 @@ iNES::~iNES() {}
 
 uint16_t iNES::resolveCPU(uint16_t addr) const {
   if (addr >= 0x8000 /* Start of PRG */) {
-    addr -= 0x8000;
+    addr &= 0x7FFF;
     if (m_file->hdr.prg_size == 1) addr %= PRG_BLOCK_SIZE; // Mirror PRG if only one bank available
     if (m_file->hdr.flags6.trainer) addr += TRAINER_BLOCK_SIZE;
     return addr;

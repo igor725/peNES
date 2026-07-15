@@ -1,10 +1,7 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.20)
+
 project(peNES LANGUAGES CXX)
-
-set(CMAKE_CXX_STANDARD 23)
 find_package(SDL3 REQUIRED)
-
-add_compile_options(-march=native)
 
 add_executable(peNES
 	src/main.cpp
@@ -13,4 +10,7 @@ add_executable(peNES
 	src/ppu.cpp
 	src/mmu.cpp
 )
+
 target_link_libraries(peNES PRIVATE SDL3::SDL3)
+set_target_properties(peNES PROPERTIES CXX_STANDARD 23)
+target_compile_options(peNES PRIVATE -march=native)
