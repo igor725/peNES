@@ -1,9 +1,8 @@
 #include "ppu.hh"
 
 #include "cpu.hh"
-#include "ines.hh"
 
-PPU::PPU(CPU6502& c, iNES& i): m_cpu(c), m_cycle(0), m_scanline(0), m_frameReady(false), m_mirrorVertically(false) {}
+PPU::PPU(CPU6502& c): m_cpu(c), m_cycle(0), m_scanline(0), m_frameReady(false), m_mirrorVertically(false) {}
 
 PPU::~PPU() {}
 
@@ -77,7 +76,7 @@ uint8_t PPU::cpuRead(uint16_t addr) {
       m_addrLatch = 0;
     } break;
     case 0x07 /* PPUDATA */: {
-      uint8_t data = m_readBuffer;
+      data         = m_readBuffer;
       m_readBuffer = readInternal(m_vramAddr);
 
       if (m_vramAddr >= 0x3F00) {
@@ -86,7 +85,6 @@ uint8_t PPU::cpuRead(uint16_t addr) {
       }
 
       m_vramAddr += (m_reg.ctrl & 0x04) ? 32 : 1;
-      return data;
     } break;
   }
 
@@ -190,7 +188,7 @@ void PPU::pixelEval() {
       if (spriteEnabled) {
         for (int i = 0; i < 64; ++i) {
           uint8_t spriteY    = m_oam[i * 4 + 0];
-          uint8_t tileID     = m_oam[i * 4 + 1];
+          uint8_t sprTile    = m_oam[i * 4 + 1];
           uint8_t attributes = m_oam[i * 4 + 2];
           uint8_t spriteX    = m_oam[i * 4 + 3];
 
@@ -205,7 +203,6 @@ void PPU::pixelEval() {
               if (attributes & 0x40) spriteFineX = 7 - spriteFineX;
 
               uint16_t sprPatternBase = 0;
-              uint8_t  sprTile        = tileID;
 
               if (spriteHeight == 16) {
                 sprPatternBase = (tileID & 0x01) ? 0x1000 : 0x0000;

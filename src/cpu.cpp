@@ -1,10 +1,106 @@
 #include "cpu.hh"
 
 #include <cstdint>
+#include <exception>
+#include <format>
+#include <iterator>
 
-CPU6502::CPU6502() {}
+class UnhandledInstruction: public std::exception {
+  public:
+  UnhandledInstruction() {}
+
+  const char* what() const noexcept override { return ""; }
+};
+
+CPU6502::CPU6502(): MMU() {}
 
 CPU6502::~CPU6502() {}
+
+std::string CPU6502::InstructionStatus::buildMnemonic() const {
+  std::string temp;
+  temp.reserve(10);
+
+  switch (flags.mnemonic) {
+    case Mnemonic::ADC: temp.append("ADC"); break;
+    case Mnemonic::AND: temp.append("AND"); break;
+    case Mnemonic::ASL: temp.append("ASL"); break;
+    case Mnemonic::BCC: temp.append("BCC"); break;
+    case Mnemonic::BCS: temp.append("BCS"); break;
+    case Mnemonic::BEQ: temp.append("BEQ"); break;
+    case Mnemonic::BIT: temp.append("BIT"); break;
+    case Mnemonic::BMI: temp.append("BMI"); break;
+    case Mnemonic::BNE: temp.append("BNE"); break;
+    case Mnemonic::BPL: temp.append("BPL"); break;
+    case Mnemonic::BRK: temp.append("BRK"); break;
+    case Mnemonic::BVC: temp.append("BVC"); break;
+    case Mnemonic::BVS: temp.append("BVS"); break;
+    case Mnemonic::CLC: temp.append("CLC"); break;
+    case Mnemonic::CLD: temp.append("CLD"); break;
+    case Mnemonic::CLI: temp.append("CLI"); break;
+    case Mnemonic::CLV: temp.append("CLV"); break;
+    case Mnemonic::CMP: temp.append("CMP"); break;
+    case Mnemonic::CPX: temp.append("CPX"); break;
+    case Mnemonic::CPY: temp.append("CPY"); break;
+    case Mnemonic::DEC: temp.append("DEC"); break;
+    case Mnemonic::DEX: temp.append("DEX"); break;
+    case Mnemonic::DEY: temp.append("DEY"); break;
+    case Mnemonic::EOR: temp.append("EOR"); break;
+    case Mnemonic::INC: temp.append("INC"); break;
+    case Mnemonic::INX: temp.append("INX"); break;
+    case Mnemonic::INY: temp.append("INY"); break;
+    case Mnemonic::JMP: temp.append("JMP"); break;
+    case Mnemonic::JSR: temp.append("JSR"); break;
+    case Mnemonic::LDA: temp.append("LDA"); break;
+    case Mnemonic::LDX: temp.append("LDX"); break;
+    case Mnemonic::LDY: temp.append("LDY"); break;
+    case Mnemonic::LSR: temp.append("LSR"); break;
+    case Mnemonic::NOP: temp.append("NOP"); break;
+    case Mnemonic::ORA: temp.append("ORA"); break;
+    case Mnemonic::PHA: temp.append("PHA"); break;
+    case Mnemonic::PHP: temp.append("PHP"); break;
+    case Mnemonic::PLA: temp.append("PLA"); break;
+    case Mnemonic::PLP: temp.append("PLP"); break;
+    case Mnemonic::ROL: temp.append("ROL"); break;
+    case Mnemonic::ROR: temp.append("ROR"); break;
+    case Mnemonic::RTI: temp.append("RTI"); break;
+    case Mnemonic::RTS: temp.append("RTS"); break;
+    case Mnemonic::SBC: temp.append("SBC"); break;
+    case Mnemonic::SEC: temp.append("SEC"); break;
+    case Mnemonic::SED: temp.append("SED"); break;
+    case Mnemonic::SEI: temp.append("SEI"); break;
+    case Mnemonic::STA: temp.append("STA"); break;
+    case Mnemonic::STX: temp.append("STX"); break;
+    case Mnemonic::STY: temp.append("STY"); break;
+    case Mnemonic::TAX: temp.append("TAX"); break;
+    case Mnemonic::TAY: temp.append("TAY"); break;
+    case Mnemonic::TSX: temp.append("TSX"); break;
+    case Mnemonic::TXA: temp.append("TXA"); break;
+    case Mnemonic::TXS: temp.append("TXS"); break;
+    case Mnemonic::TYA: temp.append("TYA"); break;
+    default: std::format_to(std::back_inserter(temp), "${:X}", holder.raw); break;
+  }
+
+  temp.push_back(' ');
+
+  switch (addrMode) {
+    case AddrMode::Accum: temp.push_back('A');
+    case AddrMode::Absolute: std::format_to(std::back_inserter(temp), "${:X}", operand.u16); break;
+    case AddrMode::AbsoluteX: std::format_to(std::back_inserter(temp), "${:X},X", operand.u16); break;
+    case AddrMode::AbsoluteY: std::format_to(std::back_inserter(temp), "${:X},Y", operand.u16); break;
+    case AddrMode::Immediate: std::format_to(std::back_inserter(temp), "#${:X}", operand.u8); break;
+    case AddrMode::Implied: temp.append("impl"); break;
+    case AddrMode::Indirect: std::format_to(std::back_inserter(temp), "(${:X})", operand.u16); break;
+    case AddrMode::IndexedXIndir: std::format_to(std::back_inserter(temp), "(${:X},X)", operand.u8); break;
+    case AddrMode::IndirIndexedY: std::format_to(std::back_inserter(temp), "(${:X}),Y", operand.u8); break;
+    case AddrMode::Relative: std::format_to(std::back_inserter(temp), "${:X}", operand.s8); break;
+    case AddrMode::ZeroPage: std::format_to(std::back_inserter(temp), "${:X}", operand.u8); break;
+    case AddrMode::ZeroPageX: std::format_to(std::back_inserter(temp), "${:X},X", operand.u8); break;
+    case AddrMode::ZeroPageY: std::format_to(std::back_inserter(temp), "${:X},Y", operand.u8); break;
+    default: temp.append("???"); break;
+  }
+
+  return temp;
+}
 
 void CPU6502::reset() {
   m_nmitriggered = false;
@@ -17,29 +113,43 @@ void CPU6502::reset() {
   m_regs.PC      = readRam<uint16_t>(0xFFFC);
 }
 
-uint8_t CPU6502::handleControl(Instruction inst) {
-  if (inst.branch.sig == 0x10) { // Handle branching
-    auto operand = readPC<int8_t>();
+uint8_t CPU6502::handleControl(InstructionStatus& status) {
+  if (status->branch.sig == 0x10) { // Handle branching
+    status << AddrMode::Relative << readPC<int8_t>();
 
     bool flag_status = false;
-
-    switch (inst.branch.sel) {
-      case 0b00: flag_status = m_regs.P.N; break; // Negative
-      case 0b01: flag_status = m_regs.P.V; break; // Overflow
-      case 0b10: flag_status = m_regs.P.C; break; // Carry
-      case 0b11: flag_status = m_regs.P.Z; break; // Zero
+    switch (status->branch.sel) {
+      case 0b00 /* Negative */: {
+        status << (status->branch.cond ? Mnemonic::BMI : Mnemonic::BPL);
+        flag_status = m_regs.P.N;
+      } break;
+      case 0b01 /* Overflow */: {
+        status << (status->branch.cond ? Mnemonic::BVS : Mnemonic::BVC);
+        flag_status = m_regs.P.V;
+      } break;
+      case 0b10 /* Carry */: {
+        status << (status->branch.cond ? Mnemonic::BCS : Mnemonic::BCC);
+        flag_status = m_regs.P.C;
+      } break;
+      case 0b11 /* Zero */: {
+        status << (status->branch.cond ? Mnemonic::BEQ : Mnemonic::BNE);
+        flag_status = m_regs.P.Z;
+      } break;
     }
+    status << preExecHook(status);
 
-    if (flag_status != inst.branch.cond) return 2;
+    if (flag_status != status->branch.cond) return postExecHook(status, 2);
 
     uint16_t old_pc = m_regs.PC;
-    m_regs.PC += operand;
-    return (old_pc & 0xFF00) == (m_regs.PC & 0xFF00) ? 3 : 4;
+    m_regs.PC += status.operand.s8;
+    return postExecHook(status, (old_pc & 0xFF00) == (m_regs.PC & 0xFF00) ? 3 : 4);
   }
 
-  switch (inst.deflt.operation) {
+  switch (status->deflt.operation) {
     case 0x00: { // Control Flow
-      if (inst.getAddrMode() == 0x00) /* BRK */ {
+      if (status->getAddrMode() == 0x00) /* BRK */ {
+        status << Mnemonic::BRK << preExecHook(status);
+
         pushStack<uint16_t>(++m_regs.PC);
         m_regs.P.I = 1;
 
@@ -48,302 +158,384 @@ uint8_t CPU6502::handleControl(Instruction inst) {
         p.B = 1;
         pushStack<uint8_t>(p._raw);
         m_regs.PC = readRam<uint16_t>(0xFFFE);
-        return 7;
-      } else if (inst.getAddrMode() == 0x01) /* NOP */ {
-        ++m_regs.PC;
-        return 2;
-      } else if (inst.getAddrMode() == 0x02) /* PHP */ {
+        return postExecHook(status, 7);
+      } else if (status->getAddrMode() == 0x01) /* NOP */ {
+        status << Mnemonic::NOP << AddrMode::Absolute << readPC<uint8_t>() << preExecHook(status);
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x02) /* PHP */ {
+        status << Mnemonic::PHP << preExecHook(status);
+
         auto p = m_regs.P;
 
         p.B = 1;
         pushStack<uint8_t>(p._raw);
-        return 3;
-      } else if (inst.getAddrMode() == 0x03) /* NOP */ {
-        readRam<uint16_t>(readPC<uint16_t>());
-        return 4;
-      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x05) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x06) /* CLC */ {
+        return postExecHook(status, 3);
+      } else if (status->getAddrMode() == 0x03) /* NOP */ {
+        status << Mnemonic::NOP << AddrMode::Absolute << readPC<uint16_t>() << preExecHook(status);
+
+        readRam<uint16_t>(status.operand.u16);
+        return postExecHook(status, 4);
+      } else if (status->getAddrMode() == 0x04) /* ??? */ {
+      } else if (status->getAddrMode() == 0x05) /* ??? */ {
+      } else if (status->getAddrMode() == 0x06) /* CLC */ {
+        status << Mnemonic::CLC << preExecHook(status);
+
         m_regs.P.C = 0;
-        return 2;
-      } else if (inst.getAddrMode() == 0x07) /* CLC */ {
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x07) /* CLC */ {
       }
     } break;
     case 0x01: {
-      if (inst.getAddrMode() == 0x00) /* JSR */ {
-        auto const operand = readPC<uint16_t>();
+      if (status->getAddrMode() == 0x00) /* JSR abs */ {
+        status << Mnemonic::JSR << AddrMode::Absolute << readPC<uint16_t>() << preExecHook(status);
 
         pushStack<uint16_t>(m_regs.PC - 1);
-        m_regs.PC = operand;
-        return 6;
-      } else if (inst.getAddrMode() == 0x01) /* BIT zp */ {
-        auto test  = readRamByte(readPC<uint8_t>());
-        m_regs.P.Z = (m_regs.A & test) == 0;
-        m_regs.P.N = (test & 0x80) > 0;
-        m_regs.P.V = (test & 0x40) > 0;
-        return 3;
-      } else if (inst.getAddrMode() == 0x02) /* PLP */ {
+        m_regs.PC = status.operand.u16;
+        return postExecHook(status, 6);
+      } else if (status->getAddrMode() == 0x01) /* BIT zp */ {
+        status << Mnemonic::BIT << AddrMode::ZeroPage << readPC<uint8_t>() << preExecHook(status);
+
+        auto const test = readRamByte(status.operand.u8);
+        m_regs.P.Z      = (m_regs.A & test) == 0;
+        m_regs.P.N      = (test & 0x80) > 0;
+        m_regs.P.V      = (test & 0x40) > 0;
+        return postExecHook(status, 3);
+      } else if (status->getAddrMode() == 0x02) /* PLP */ {
+        status << Mnemonic::PLP << preExecHook(status);
+
         m_regs.P._raw = (popStack<uint8_t>() & 0xEF) | 0x20;
-        return 4;
-      } else if (inst.getAddrMode() == 0x03) /* BIT abs */ {
-        auto test  = readRamByte(readPC<uint16_t>());
+        return postExecHook(status, 4);
+      } else if (status->getAddrMode() == 0x03) /* BIT abs */ {
+        status << Mnemonic::BIT << AddrMode::Absolute << readPC<uint16_t>() << preExecHook(status);
+
+        auto test  = readRamByte(status.operand.u16);
         m_regs.P.Z = (m_regs.A & test) == 0;
         m_regs.P.N = (test & 0x80) > 0;
         m_regs.P.V = (test & 0x40) > 0;
-        return 4;
-      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x05) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x06) /* SEC */ {
+        return postExecHook(status, 4);
+      } else if (status->getAddrMode() == 0x04) /* ??? */ {
+      } else if (status->getAddrMode() == 0x05) /* ??? */ {
+      } else if (status->getAddrMode() == 0x06) /* SEC */ {
+        status << Mnemonic::SEC << preExecHook(status);
+
         m_regs.P.C = 1;
-        return 2;
-      } else if (inst.getAddrMode() == 0x07) /* ??? */ {
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x07) /* ??? */ {
       }
     } break;
     case 0x02: {
-      if (inst.getAddrMode() == 0x00) /* RTI */ {
+      if (status->getAddrMode() == 0x00) /* RTI */ {
+        status << Mnemonic::RTI << preExecHook(status);
+
         m_regs.P._raw = (popStack<uint8_t>() & 0xEF) | 0x20;
         m_regs.PC     = popStack<uint16_t>();
-        return 6;
-      } else if (inst.getAddrMode() == 0x01) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x02) /* PHA */ {
+        return postExecHook(status, 6);
+      } else if (status->getAddrMode() == 0x01) /* ??? */ {
+      } else if (status->getAddrMode() == 0x02) /* PHA */ {
+        status << Mnemonic::PHA << preExecHook(status);
+
         pushStack<uint8_t>(m_regs.A);
-        return 3;
-      } else if (inst.getAddrMode() == 0x03) /* JMP abs */ {
-        m_regs.PC = readPC<uint16_t>();
-        return 3;
-      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x05) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x06) /* CLI */ {
+        return postExecHook(status, 3);
+      } else if (status->getAddrMode() == 0x03) /* JMP abs */ {
+        status << Mnemonic::JMP << AddrMode::Absolute << readPC<uint16_t>() << preExecHook(status);
+
+        m_regs.PC = status.operand.u16;
+        return postExecHook(status, 3);
+      } else if (status->getAddrMode() == 0x04) /* ??? */ {
+      } else if (status->getAddrMode() == 0x05) /* ??? */ {
+      } else if (status->getAddrMode() == 0x06) /* CLI */ {
+        status << Mnemonic::CLI << preExecHook(status);
+
         m_regs.P.I = 0;
-        return 2;
-      } else if (inst.getAddrMode() == 0x07) /* ??? */ {
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x07) /* ??? */ {
       }
     } break;
     case 0x03: {
-      if (inst.getAddrMode() == 0x00) /* RTS */ {
+      if (status->getAddrMode() == 0x00) /* RTS */ {
+        status << Mnemonic::RTS << preExecHook(status);
+
         m_regs.PC = popStack<uint16_t>() + 1;
-        return 6;
-      } else if (inst.getAddrMode() == 0x01) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x02) /* PLA */ {
+        return postExecHook(status, 6);
+      } else if (status->getAddrMode() == 0x01) /* ??? */ {
+      } else if (status->getAddrMode() == 0x02) /* PLA */ {
+        status << Mnemonic::PLA << preExecHook(status);
+
         m_regs.A   = popStack<uint8_t>();
         m_regs.P.Z = m_regs.A == 0;
         m_regs.P.N = (m_regs.A & 0x80) > 0;
-        return 4;
-      } else if (inst.getAddrMode() == 0x03) /* JMP (oper) */ {
-        uint16_t low_addr  = readPC<uint16_t>();
-        uint16_t high_addr = (low_addr & 0xFF00) | static_cast<uint8_t>((low_addr & 0xFF) + 1);
-        m_regs.PC          = (readRamByte(high_addr) << 8) | readRamByte(low_addr);
-        return 5;
-      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x05) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x06) /* SEI */ {
-        m_regs.P.I = true;
-        return 2;
+        return postExecHook(status, 4);
+      } else if (status->getAddrMode() == 0x03) /* JMP (oper) */ {
+        status << Mnemonic::JMP << AddrMode::Indirect << readPC<uint16_t>() << preExecHook(status);
 
-      } else if (inst.getAddrMode() == 0x07) /* ??? */ {
+        uint16_t high_addr = (status.operand.u16 & 0xFF00) | static_cast<uint8_t>((status.operand.u16 & 0xFF) + 1);
+        m_regs.PC          = (readRamByte(high_addr) << 8) | readRamByte(status.operand.u16);
+        return postExecHook(status, 5);
+      } else if (status->getAddrMode() == 0x04) /* ??? */ {
+      } else if (status->getAddrMode() == 0x05) /* ??? */ {
+      } else if (status->getAddrMode() == 0x06) /* SEI */ {
+        status << Mnemonic::SEI << preExecHook(status);
+
+        m_regs.P.I = true;
+        return postExecHook(status, 2);
+
+      } else if (status->getAddrMode() == 0x07) /* ??? */ {
       }
     } break;
     case 0x04: {
-      if (inst.getAddrMode() == 0x00) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x01) /* STY zp */ {
-        writeRamByte(readPC<uint8_t>(), m_regs.Y);
-        return 3;
-      } else if (inst.getAddrMode() == 0x02) /* DEY */ {
+      if (status->getAddrMode() == 0x00) /* ??? */ {
+      } else if (status->getAddrMode() == 0x01) /* STY zp */ {
+        status << Mnemonic::STY << AddrMode::ZeroPage << readPC<uint8_t>() << preExecHook(status);
+
+        writeRamByte(status.operand.u8, m_regs.Y);
+        return postExecHook(status, 3);
+      } else if (status->getAddrMode() == 0x02) /* DEY */ {
+        status << Mnemonic::DEY << preExecHook(status);
+
         --m_regs.Y;
         m_regs.P.Z = m_regs.Y == 0;
         m_regs.P.N = (m_regs.Y & 0x80) > 0;
-        return 2;
-      } else if (inst.getAddrMode() == 0x03) /* STY abs */ {
-        writeRamByte(readPC<uint16_t>(), m_regs.Y);
-        return 4;
-      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x05) /* STY zp,X */ {
-        writeRamByte(static_cast<uint8_t>(readPC<uint8_t>() + m_regs.X), m_regs.Y);
-        return 4;
-      } else if (inst.getAddrMode() == 0x06) /* TYA */ {
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x03) /* STY abs */ {
+        status << Mnemonic::STY << AddrMode::Absolute << readPC<uint16_t>() << preExecHook(status);
+        writeRamByte(status.operand.u16, m_regs.Y);
+        return postExecHook(status, 4);
+      } else if (status->getAddrMode() == 0x04) /* ??? */ {
+      } else if (status->getAddrMode() == 0x05) /* STY zp,X */ {
+        status << Mnemonic::STY << AddrMode::ZeroPageX << readPC<uint8_t>() << preExecHook(status);
+
+        auto const rval = static_cast<uint8_t>(status.operand.u8 + m_regs.X);
+
+        writeRamByte(rval, m_regs.Y);
+        return postExecHook(status, 4);
+      } else if (status->getAddrMode() == 0x06) /* TYA */ {
+        status << Mnemonic::TYA << preExecHook(status);
+
         m_regs.A   = m_regs.Y;
         m_regs.P.Z = m_regs.A == 0;
         m_regs.P.N = (m_regs.A & 0x80) > 0;
-        return 2;
-      } else if (inst.getAddrMode() == 0x07) /* ??? */ {
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x07) /* ??? */ {
       }
     } break;
     case 0x05: {
-      if (inst.getAddrMode() == 0x00) /* LDY imm */ {
-        m_regs.Y   = readPC<uint8_t>();
+      if (status->getAddrMode() == 0x00) /* LDY imm */ {
+        status << Mnemonic::LDY << AddrMode::Immediate << readPC<uint8_t>() << preExecHook(status);
+
+        m_regs.Y   = status.operand.u8;
         m_regs.P.Z = m_regs.Y == 0;
         m_regs.P.N = (m_regs.Y & 0x80) > 0;
-        return 2;
-      } else if (inst.getAddrMode() == 0x01) /* LDY zp */ {
-        m_regs.Y   = readRamByte(readPC<uint8_t>());
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x01) /* LDY zp */ {
+        status << Mnemonic::LDY << AddrMode::ZeroPage << readPC<uint8_t>() << preExecHook(status);
+
+        m_regs.Y   = readRamByte(status.operand.u8);
         m_regs.P.Z = m_regs.Y == 0;
         m_regs.P.N = (m_regs.Y & 0x80) > 0;
-        return 3;
-      } else if (inst.getAddrMode() == 0x02) /* TAY */ {
+        return postExecHook(status, 3);
+      } else if (status->getAddrMode() == 0x02) /* TAY */ {
+        status << Mnemonic::TAY << preExecHook(status);
         m_regs.Y   = m_regs.A;
         m_regs.P.Z = m_regs.Y == 0;
         m_regs.P.N = (m_regs.Y & 0x80) > 0;
-        return 2;
-      } else if (inst.getAddrMode() == 0x03) /* LDY abs */ {
-        m_regs.Y   = readRamByte(readPC<uint16_t>());
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x03) /* LDY abs */ {
+        status << AddrMode::Absolute << readPC<uint16_t>() << preExecHook(status);
+
+        m_regs.Y   = readRamByte(status.operand.u16);
         m_regs.P.Z = m_regs.Y == 0;
         m_regs.P.N = (m_regs.Y & 0x80) > 0;
-        return 4;
-      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x05) /* LDY zp,X */ {
-        m_regs.Y   = readRamByte(static_cast<uint8_t>(readPC<uint8_t>() + m_regs.X));
+        return postExecHook(status, 4);
+      } else if (status->getAddrMode() == 0x04) /* ??? */ {
+      } else if (status->getAddrMode() == 0x05) /* LDY zp,X */ {
+        status << Mnemonic::LDY << AddrMode::ZeroPageX << readPC<uint8_t>() << preExecHook(status);
+        m_regs.Y   = readRamByte(static_cast<uint8_t>(status.operand.u8 + m_regs.X));
         m_regs.P.Z = m_regs.Y == 0;
         m_regs.P.N = (m_regs.Y & 0x80) > 0;
-        return 4;
-      } else if (inst.getAddrMode() == 0x06) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x07) /* LDY abs,X */ {
-        uint16_t base_addr   = readPC<uint16_t>();
-        uint16_t target_addr = base_addr + m_regs.X;
+        return postExecHook(status, 4);
+      } else if (status->getAddrMode() == 0x06) /* ??? */ {
+      } else if (status->getAddrMode() == 0x07) /* LDY abs,X */ {
+        status << Mnemonic::LDY << AddrMode::AbsoluteX << readPC<uint16_t>() << preExecHook(status);
+
+        uint16_t target_addr = status.operand.u16 + m_regs.X;
 
         m_regs.Y = readRamByte(target_addr);
-        return (base_addr & 0xFF00) == (target_addr & 0xFF00) ? 4 : 5;
+        return postExecHook(status, (status.operand.u16 & 0xFF00) == (target_addr & 0xFF00) ? 4 : 5);
       }
     } break;
     case 0x06: {
-      if (inst.getAddrMode() == 0x00) /* CPY imm */ {
-        auto operand = readPC<uint8_t>();
+      if (status->getAddrMode() == 0x00) /* CPY imm */ {
+        status << Mnemonic::CPY << AddrMode::Immediate << readPC<uint8_t>() << preExecHook(status);
 
-        uint8_t val = m_regs.Y - operand;
+        uint8_t val = m_regs.Y - status.operand.u8;
 
-        m_regs.P.C = m_regs.Y >= operand;
+        m_regs.P.C = m_regs.Y >= status.operand.u8;
         m_regs.P.Z = val == 0;
         m_regs.P.N = (val & 0x80) > 0;
-        return 2;
-      } else if (inst.getAddrMode() == 0x01) /* CPY zp */ {
-        auto operand = readRamByte(readPC<uint8_t>());
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x01) /* CPY zp */ {
+        status << Mnemonic::CPY << AddrMode::ZeroPage << readPC<uint8_t>() << preExecHook(status);
 
-        uint8_t val = m_regs.Y - operand;
+        auto const    rval = readRamByte(status.operand.u8);
+        uint8_t const val  = m_regs.Y - rval;
 
-        m_regs.P.C = m_regs.Y >= operand;
+        m_regs.P.C = m_regs.Y >= rval;
         m_regs.P.Z = val == 0;
         m_regs.P.N = (val & 0x80) > 0;
-        return 3;
-      } else if (inst.getAddrMode() == 0x02) /* INY */ {
+        return postExecHook(status, 3);
+      } else if (status->getAddrMode() == 0x02) /* INY */ {
+        status << Mnemonic::INY << preExecHook(status);
+
         m_regs.Y += 1;
         m_regs.P.Z = m_regs.Y == 0;
         m_regs.P.N = (m_regs.Y & 0x80) > 0;
-        return 2;
-      } else if (inst.getAddrMode() == 0x03) /* CPY abs */ {
-        auto operand = readRamByte(readPC<uint16_t>());
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x03) /* CPY abs */ {
+        status << Mnemonic::CPY << AddrMode::Absolute << readPC<uint16_t>() << preExecHook(status);
 
-        uint8_t val = m_regs.Y - operand;
+        auto const rval = readRamByte(status.operand.u16);
 
-        m_regs.P.C = m_regs.Y >= operand;
+        uint8_t const val = m_regs.Y - rval;
+
+        m_regs.P.C = m_regs.Y >= rval;
         m_regs.P.Z = val == 0;
         m_regs.P.N = (val & 0x80) > 0;
-        return 4;
-      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x05) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x06) /* CLD */ {
+        return postExecHook(status, 4);
+      } else if (status->getAddrMode() == 0x04) /* ??? */ {
+      } else if (status->getAddrMode() == 0x05) /* ??? */ {
+      } else if (status->getAddrMode() == 0x06) /* CLD */ {
+        status << Mnemonic::CLD << preExecHook(status);
         m_regs.P.D = false;
-        return 2;
-      } else if (inst.getAddrMode() == 0x07) /* ??? */ {
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x07) /* ??? */ {
       }
     } break;
     case 0x07: {
-      if (inst.getAddrMode() == 0x00) /* CPX */ {
-        auto operand = readPC<uint8_t>();
+      if (status->getAddrMode() == 0x00) /* CPX imm */ {
+        status << Mnemonic::CPX << AddrMode::Immediate << readPC<uint8_t>() << preExecHook(status);
 
-        uint8_t val = m_regs.X - operand;
+        uint8_t val = m_regs.X - status.operand.u8;
 
-        m_regs.P.C = m_regs.X >= operand;
+        m_regs.P.C = m_regs.X >= status.operand.u8;
         m_regs.P.Z = val == 0;
         m_regs.P.N = (val & 0x80) > 0;
-        return 2;
-      } else if (inst.getAddrMode() == 0x01) /* CPX zp */ {
-        auto operand = readRamByte(readPC<uint8_t>());
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x01) /* CPX zp */ {
+        status << Mnemonic::CPX << AddrMode::ZeroPage << readPC<uint8_t>() << preExecHook(status);
 
-        uint8_t val = m_regs.X - operand;
+        auto const rval = readRamByte(status.operand.u8);
 
-        m_regs.P.C = m_regs.X >= operand;
+        uint8_t const val = m_regs.X - rval;
+
+        m_regs.P.C = m_regs.X >= rval;
         m_regs.P.Z = val == 0;
         m_regs.P.N = (val & 0x80) > 0;
-        return 3;
-      } else if (inst.getAddrMode() == 0x02) /* INX */ {
+        return postExecHook(status, 3);
+      } else if (status->getAddrMode() == 0x02) /* INX */ {
+        status << Mnemonic::INX << preExecHook(status);
+
         m_regs.X += 1;
         m_regs.P.Z = m_regs.X == 0;
         m_regs.P.N = (m_regs.X & 0x80) > 0;
-        return 2;
-      } else if (inst.getAddrMode() == 0x03) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x05) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x06) /* SED */ {
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x03) /* ??? */ {
+      } else if (status->getAddrMode() == 0x04) /* ??? */ {
+      } else if (status->getAddrMode() == 0x05) /* ??? */ {
+      } else if (status->getAddrMode() == 0x06) /* SED */ {
+        status << Mnemonic::SED << preExecHook(status);
+
         m_regs.P.D = 1;
-        return 2;
-      } else if (inst.getAddrMode() == 0x07) /* ??? */ {
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x07) /* ??? */ {
       }
     } break;
   }
 
-  throw UnhandledInstruction(inst.raw);
+  throw UnhandledInstruction();
 }
 
-uint8_t CPU6502::handleMath(Instruction inst) {
-  auto getAddrFromOp = [&]() -> std::pair<uint8_t /* num cycles */, uint16_t /* addr */> {
-    switch (inst.getAddrMode()) {
+uint8_t CPU6502::handleMath(InstructionStatus& status) {
+  auto const getAddrFromOp = [&]() -> std::pair<uint8_t /* num cycles */, uint16_t /* addr */> {
+    switch (status->getAddrMode()) {
       case 0b000 /* (Indir,X) */: {
-        auto const operand = readPC<uint8_t>();
-        return {5, (readRamByte(static_cast<uint8_t>((operand + m_regs.X) + 1)) << 8) | readRamByte(static_cast<uint8_t>(operand + m_regs.X))};
+        status << AddrMode::IndexedXIndir << readPC<uint8_t>() << preExecHook(status);
+        return {5,
+                (readRamByte(static_cast<uint8_t>((status.operand.u8 + m_regs.X) + 1)) << 8) | readRamByte(static_cast<uint8_t>(status.operand.u8 + m_regs.X))};
       } break;
-      case 0b001 /* Zero Page */: return {1, readPC<uint8_t>()};
-      case 0b011 /* Absolute */: return {2, readPC<uint16_t>()};
+      case 0b001 /* Zero Page */: {
+        status << AddrMode::ZeroPage << readPC<uint8_t>() << preExecHook(status);
+        return {1, status.operand.u8};
+      } break;
+      case 0b011 /* Absolute */: {
+        status << AddrMode::Absolute << readPC<uint16_t>() << preExecHook(status);
+        return {2, status.operand.u16};
+      } break;
       case 0b100 /* (Indir),Y*/: {
-        auto const operand = readPC<uint8_t>();
-        auto const base    = ((readRamByte(static_cast<uint8_t>(operand + 1)) << 8) | readRamByte(operand));
-        auto const target  = base + m_regs.Y;
+        status << AddrMode::IndirIndexedY << readPC<uint8_t>() << preExecHook(status);
+        auto const base   = ((readRamByte(static_cast<uint8_t>(status.operand.u8 + 1)) << 8) | readRamByte(status.operand.u8));
+        auto const target = base + m_regs.Y;
         return {(base & 0xFF00) == (target & 0xFF00) ? 4 : 5, target};
       } break;
-      case 0b101 /* Zero Page, X */: return {2, static_cast<uint8_t>(readPC<uint8_t>() + m_regs.X)};
+      case 0b101 /* Zero Page, X */: {
+        status << AddrMode::ZeroPageX << readPC<uint8_t>() << preExecHook(status);
+        return {2, static_cast<uint8_t>(status.operand.u8 + m_regs.X)};
+      } break;
       case 0b110 /* Absolute, Y */: {
-        auto const base   = readPC<uint16_t>();
-        auto const target = base + m_regs.Y;
-        return {(base & 0xFF00) == (target & 0xFF00) ? 3 : 4, target};
+        status << AddrMode::AbsoluteY << readPC<uint16_t>() << preExecHook(status);
+        auto const target = status.operand.u16 + m_regs.Y;
+        return {(status.operand.u16 & 0xFF00) == (target & 0xFF00) ? 3 : 4, target};
       } break;
       case 0b111 /* Absolute, X */: {
-        auto const base   = readPC<uint16_t>();
-        auto const target = base + m_regs.X;
-        return {(base & 0xFF00) == (target & 0xFF00) ? 3 : 4, target};
+        status << AddrMode::AbsoluteX << readPC<uint16_t>() << preExecHook(status);
+        auto const target = status.operand.u16 + m_regs.X;
+        return {(status.operand.u16 & 0xFF00) == (target & 0xFF00) ? 3 : 4, target};
       } break;
       default: throw -1;
     }
   };
-  auto resolveValue = [&]() -> std::pair<uint8_t, uint8_t> {
-    if (inst.getAddrMode() == 0x02) return {1, readPC<uint8_t>()};
+  auto const resolveValue = [&]() -> std::pair<uint8_t, uint8_t> {
+    if (status->getAddrMode() == 0x02) {
+      status << AddrMode::Immediate << readPC<uint8_t>() << preExecHook(status);
+      return {1, status.operand.u8};
+    }
     auto [cycles, addr] = getAddrFromOp();
     return {cycles, readRamByte(addr)};
   };
 
-  switch (inst.deflt.operation) {
+  switch (status->deflt.operation) {
     case 0x00: { // ORA
+      status << Mnemonic::ORA;
+
       auto const [cycles, value] = resolveValue();
 
       m_regs.A |= value;
       m_regs.P.Z = m_regs.A == 0;
       m_regs.P.N = (m_regs.A & 0x80) > 0;
-      return 1 + cycles;
+      return postExecHook(status, 1 + cycles);
     } break;
     case 0x01: { // AND
+      status << Mnemonic::AND;
+
       auto const [cycles, value] = resolveValue();
 
       m_regs.A &= value;
       m_regs.P.Z = m_regs.A == 0;
       m_regs.P.N = (m_regs.A & 0x80) > 0;
-      return 1 + cycles;
+      return postExecHook(status, 1 + cycles);
     } break;
     case 0x02: { // EOR
+      status << Mnemonic::EOR;
+
       auto const [cycles, value] = resolveValue();
 
       m_regs.A ^= value;
       m_regs.P.Z = m_regs.A == 0;
       m_regs.P.N = (m_regs.A & 0x80) > 0;
-      return 1 + cycles;
+      return postExecHook(status, 1 + cycles);
     } break;
     case 0x03: { // ADC
+      status << Mnemonic::ADC;
+
       auto const [cycles, value] = resolveValue();
 
       uint16_t result = m_regs.A + value + m_regs.P.C;
@@ -352,32 +544,40 @@ uint8_t CPU6502::handleMath(Instruction inst) {
       m_regs.A        = result & 0xFF;
       m_regs.P.Z      = m_regs.A == 0;
       m_regs.P.N      = (m_regs.A & 0x80) > 0;
-      return 1 + cycles;
+      return postExecHook(status, 1 + cycles);
     } break;
     case 0x04: { // STA
+      status << Mnemonic::STA;
+
       auto const [cycles, addr] = getAddrFromOp();
 
       writeRamByte(addr, m_regs.A);
-      return 2 /* base number of cycles for STA */ + cycles;
+      return postExecHook(status, 2 /* base number of cycles for STA */ + cycles);
     } break;
     case 0x05: { // LDA
+      status << Mnemonic::LDA;
+
       auto const [cycles, value] = resolveValue();
 
       m_regs.A   = value;
       m_regs.P.Z = m_regs.A == 0;
       m_regs.P.N = (m_regs.A & 0x80) > 0;
-      return 1 + cycles;
+      return postExecHook(status, 1 + cycles);
     } break;
     case 0x06: { // CMP
+      status << Mnemonic::CMP;
+
       auto const [cycles, value] = resolveValue();
 
       uint8_t val = m_regs.A - value;
       m_regs.P.C  = m_regs.A >= value;
       m_regs.P.Z  = val == 0;
       m_regs.P.N  = (val & 0x80) > 0;
-      return 1 + cycles;
+      return postExecHook(status, 1 + cycles);
     } break;
     case 0x07: { // SBC
+      status << Mnemonic::SBC;
+
       auto const [cycles, value] = resolveValue();
 
       uint8_t  inverted_value = value ^ 0xFF;
@@ -389,106 +589,116 @@ uint8_t CPU6502::handleMath(Instruction inst) {
       m_regs.A   = res & 0xFF;
       m_regs.P.Z = m_regs.A == 0;
       m_regs.P.N = (m_regs.A & 0x80) > 0;
-      return 1 + cycles;
+      return postExecHook(status, 1 + cycles);
     } break;
   }
 
-  throw UnhandledInstruction(inst.raw);
+  throw UnhandledInstruction();
 }
 
-uint8_t CPU6502::handleShift(Instruction inst) {
-  switch (inst.deflt.operation) {
+uint8_t CPU6502::handleShift(InstructionStatus& status) {
+  switch (status->deflt.operation) {
     case 0x00: {
-      if (inst.getAddrMode() == 0x00) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x01) /* ASL zp */ {
-        auto const operand = readPC<uint8_t>();
+      if (status->getAddrMode() == 0x00) /* ??? */ {
+      } else if (status->getAddrMode() == 0x01) /* ASL zp */ {
+        status << Mnemonic::ASL << AddrMode::ZeroPage << readPC<uint8_t>() << preExecHook(status);
 
-        auto orig = readRamByte(operand);
-        auto res  = writeRamByte(operand, orig << 1);
+        auto orig = readRamByte(status.operand.u8);
+        auto res  = writeRamByte(status.operand.u8, orig << 1);
 
         m_regs.P.C = (orig & 0x80) > 0;
         m_regs.P.Z = (res == 0);
         m_regs.P.N = (res & 0x80) > 0;
-        return 5;
-      } else if (inst.getAddrMode() == 0x02) /* ASL A */ {
+        return postExecHook(status, 5);
+      } else if (status->getAddrMode() == 0x02) /* ASL A */ {
+        status << Mnemonic::ASL << AddrMode::Accum << preExecHook(status);
+
         m_regs.P.C = (m_regs.A & 0x80) > 0;
         m_regs.A <<= 1;
         m_regs.P.Z = (m_regs.A == 0);
         m_regs.P.N = (m_regs.A & 0x80) != 0;
-        return 2;
-      } else if (inst.getAddrMode() == 0x03) /* ASL abs */ {
-        auto const operand = readPC<uint16_t>();
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x03) /* ASL abs */ {
+        status << Mnemonic::ASL << AddrMode::Absolute << readPC<uint16_t>() << preExecHook(status);
 
-        auto orig = readRamByte(operand);
-        auto res  = writeRamByte(operand, orig << 1);
+        auto orig = readRamByte(status.operand.u16);
+        auto res  = writeRamByte(status.operand.u16, orig << 1);
 
         m_regs.P.C = (orig & 0x80) > 0;
         m_regs.P.Z = (res == 0);
         m_regs.P.N = (res & 0x80) > 0;
-        return 6;
-      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x05) /* ASL zp,X */ {
-        uint8_t addr = static_cast<uint8_t>(readPC<uint8_t>() + m_regs.X);
+        return postExecHook(status, 6);
+      } else if (status->getAddrMode() == 0x04) /* ??? */ {
+      } else if (status->getAddrMode() == 0x05) /* ASL zp,X */ {
+        status << Mnemonic::ASL << AddrMode::ZeroPageX << readPC<uint8_t>() << preExecHook(status);
+
+        uint8_t addr = static_cast<uint8_t>(status.operand.u8 + m_regs.X);
         auto    orig = readRamByte(addr);
         auto    res  = writeRamByte(addr, orig << 1);
 
         m_regs.P.C = (orig & 0x80) > 0;
         m_regs.P.Z = (res == 0);
         m_regs.P.N = (res & 0x80) > 0;
-        return 6;
-      } else if (inst.getAddrMode() == 0x06) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x07) {
-        auto addr = readPC<uint16_t>() + m_regs.X;
+        return postExecHook(status, 6);
+      } else if (status->getAddrMode() == 0x06) /* ??? */ {
+      } else if (status->getAddrMode() == 0x07) /* ??? abs,X */ {
+        status << AddrMode::AbsoluteX << readPC<uint16_t>() << preExecHook(status);
+
+        auto addr = status.operand.u16 + m_regs.X;
         auto orig = readRamByte(addr);
         auto res  = writeRamByte(addr, orig << 1);
 
         m_regs.P.C = (orig & 0x80) > 0;
         m_regs.P.Z = (res == 0);
         m_regs.P.N = (res & 0x80) > 0;
-        return 7;
+        return postExecHook(status, 7);
       }
     } break;
     case 0x01: {
-      if (inst.getAddrMode() == 0x00) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x01) /* ROL zp */ {
-        auto const operand = readPC<uint8_t>();
+      if (status->getAddrMode() == 0x00) /* ??? */ {
+      } else if (status->getAddrMode() == 0x01) /* ROL zp */ {
+        status << Mnemonic::ROL << AddrMode::ZeroPage << readPC<uint8_t>() << preExecHook(status);
 
-        uint8_t value          = readRamByte(operand);
+        uint8_t value          = readRamByte(status.operand.u8);
         uint8_t incoming_carry = m_regs.P.C ? 1 : 0;
 
         m_regs.P.C = (value & 0x80) != 0;
 
         uint8_t shifted_value = (value << 1) | incoming_carry;
 
-        writeRamByte(operand, shifted_value);
+        writeRamByte(status.operand.u8, shifted_value);
         m_regs.P.Z = (shifted_value == 0);
         m_regs.P.N = (shifted_value & 0x80) != 0;
-        return 5;
-      } else if (inst.getAddrMode() == 0x02) /* ROL A */ {
+        return postExecHook(status, 5);
+      } else if (status->getAddrMode() == 0x02) /* ROL A */ {
+        status << Mnemonic::ROL << AddrMode::Accum << preExecHook(status);
+
         uint8_t incoming_carry = m_regs.P.C ? 1 : 0;
 
         m_regs.P.C = (m_regs.A & 0x80) != 0;
         m_regs.A   = (m_regs.A << 1) | incoming_carry;
         m_regs.P.Z = (m_regs.A == 0);
         m_regs.P.N = (m_regs.A & 0x80) != 0;
-        return 2;
-      } else if (inst.getAddrMode() == 0x03) /* ROL abs */ {
-        auto const operand = readPC<uint16_t>();
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x03) /* ROL abs */ {
+        status << Mnemonic::ROL << AddrMode::Absolute << readPC<uint16_t>() << preExecHook(status);
 
-        uint8_t value          = readRamByte(operand);
+        uint8_t value          = readRamByte(status.operand.u16);
         uint8_t incoming_carry = m_regs.P.C ? 1 : 0;
 
         m_regs.P.C = (value & 0x80) != 0;
 
         uint8_t shifted_value = (value << 1) | incoming_carry;
 
-        writeRamByte(operand, shifted_value);
+        writeRamByte(status.operand.u16, shifted_value);
         m_regs.P.Z = (shifted_value == 0);
         m_regs.P.N = (shifted_value & 0x80) != 0;
-        return 6;
-      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x05) /* ROL zp,X */ {
-        uint8_t addr = static_cast<uint8_t>(readPC<uint8_t>() + m_regs.X);
+        return postExecHook(status, 6);
+      } else if (status->getAddrMode() == 0x04) /* ??? */ {
+      } else if (status->getAddrMode() == 0x05) /* ROL zp,X */ {
+        status << Mnemonic::ROL << AddrMode::ZeroPageX << readPC<uint8_t>() << preExecHook(status);
+
+        uint8_t addr = static_cast<uint8_t>(status.operand.u8 + m_regs.X);
 
         uint8_t value          = readRamByte(addr);
         uint8_t incoming_carry = m_regs.P.C ? 1 : 0;
@@ -500,70 +710,76 @@ uint8_t CPU6502::handleShift(Instruction inst) {
         writeRamByte(addr, shifted_value);
         m_regs.P.Z = (shifted_value == 0);
         m_regs.P.N = (shifted_value & 0x80) != 0;
-        return 6;
-      } else if (inst.getAddrMode() == 0x06) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x07) /* ??? */ {
+        return postExecHook(status, 6);
+      } else if (status->getAddrMode() == 0x06) /* ??? */ {
+      } else if (status->getAddrMode() == 0x07) /* ??? */ {
       }
     } break;
     case 0x02: {
-      if (inst.getAddrMode() == 0x00) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x01) /* LSR zp */ {
-        auto const operand = readPC<uint8_t>();
+      if (status->getAddrMode() == 0x00) /* ??? */ {
+      } else if (status->getAddrMode() == 0x01) /* LSR zp */ {
+        status << Mnemonic::LSR << AddrMode::ZeroPage << readPC<uint8_t>() << preExecHook(status);
 
-        auto orig = readRamByte(operand);
-        auto wr   = writeRamByte(operand, orig >> 1);
+        auto orig = readRamByte(status.operand.u8);
+        auto wr   = writeRamByte(status.operand.u8, orig >> 1);
 
         m_regs.P.N = 0;
         m_regs.P.Z = wr == 0;
         m_regs.P.C = (orig & 0x01) != 0;
-        return 5;
-      } else if (inst.getAddrMode() == 0x02) /* LSR A */ {
+        return postExecHook(status, 5);
+      } else if (status->getAddrMode() == 0x02) /* LSR A */ {
+        status << Mnemonic::LSR << AddrMode::Accum << preExecHook(status);
+
         m_regs.P.C = (m_regs.A & 0x01) != 0;
         m_regs.A >>= 1;
         m_regs.P.Z = m_regs.A == 0;
         m_regs.P.N = 0;
-        return 2;
-      } else if (inst.getAddrMode() == 0x03) /* LSR abs */ {
-        auto const operand = readPC<uint16_t>();
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x03) /* LSR abs */ {
+        status << Mnemonic::LSR << AddrMode::Absolute << readPC<uint16_t>() << preExecHook(status);
 
-        auto orig = readRamByte(operand);
-        auto wr   = writeRamByte(operand, orig >> 1);
-
-        m_regs.P.N = 0;
-        m_regs.P.Z = wr == 0;
-        m_regs.P.C = (orig & 0x01) != 0;
-        return 6;
-      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x05) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x06) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x07) /* LSR abs,X */ {
-        auto const operand = readPC<uint16_t>() + m_regs.X;
-
-        auto orig = readRamByte(operand);
-        auto wr   = writeRamByte(operand, orig >> 1);
+        auto orig = readRamByte(status.operand.u16);
+        auto wr   = writeRamByte(status.operand.u16, orig >> 1);
 
         m_regs.P.N = 0;
         m_regs.P.Z = wr == 0;
         m_regs.P.C = (orig & 0x01) != 0;
-        return 7;
+        return postExecHook(status, 6);
+      } else if (status->getAddrMode() == 0x04) /* ??? */ {
+      } else if (status->getAddrMode() == 0x05) /* ??? */ {
+      } else if (status->getAddrMode() == 0x06) /* ??? */ {
+      } else if (status->getAddrMode() == 0x07) /* LSR abs,X */ {
+        status << Mnemonic::LSR << AddrMode::AbsoluteX << readPC<uint16_t>() << preExecHook(status);
+
+        auto const rval = static_cast<uint16_t>(status.operand.u16 + m_regs.X);
+
+        auto orig = readRamByte(rval);
+        auto wr   = writeRamByte(rval, orig >> 1);
+
+        m_regs.P.N = 0;
+        m_regs.P.Z = wr == 0;
+        m_regs.P.C = (orig & 0x01) != 0;
+        return postExecHook(status, 7);
       }
     } break;
     case 0x03: {
-      if (inst.getAddrMode() == 0x00) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x01) /* ROR zp */ {
-        uint16_t target_addr = readPC<uint8_t>();
+      if (status->getAddrMode() == 0x00) /* ??? */ {
+      } else if (status->getAddrMode() == 0x01) /* ROR zp */ {
+        status << Mnemonic::ROR << AddrMode::ZeroPage << readPC<uint8_t>() << preExecHook(status);
 
-        uint8_t value = readRamByte(target_addr);
+        uint8_t value = readRamByte(status.operand.u8);
 
         uint8_t incoming_carry = m_regs.P.C ? 0x80 : 0x00;
         uint8_t shifted_value  = (value >> 1) | incoming_carry;
         m_regs.P.C             = (value & 0x01) != 0;
 
-        writeRamByte(target_addr, shifted_value);
+        writeRamByte(status.operand.u8, shifted_value);
         m_regs.P.Z = (shifted_value == 0);
         m_regs.P.N = (shifted_value & 0x80) != 0;
-        return 5;
-      } else if (inst.getAddrMode() == 0x02) /* ROR A */ {
+        return postExecHook(status, 5);
+      } else if (status->getAddrMode() == 0x02) /* ROR A */ {
+        status << Mnemonic::ROR << AddrMode::Accum << preExecHook(status);
+
         uint8_t incoming_carry = m_regs.P.C ? 0x80 : 0x00;
         uint8_t shifted_value  = (m_regs.A >> 1) | incoming_carry;
         m_regs.P.C             = (m_regs.A & 0x01) != 0;
@@ -571,9 +787,25 @@ uint8_t CPU6502::handleShift(Instruction inst) {
         m_regs.A   = shifted_value;
         m_regs.P.Z = (shifted_value == 0);
         m_regs.P.N = (shifted_value & 0x80) != 0;
-        return 2;
-      } else if (inst.getAddrMode() == 0x03) /* ROR abs */ {
-        uint16_t target_addr = readPC<uint16_t>();
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x03) /* ROR abs */ {
+        status << Mnemonic::ROR << AddrMode::Absolute << readPC<uint16_t>() << preExecHook(status);
+
+        uint8_t value = readRamByte(status.operand.u16);
+
+        uint8_t incoming_carry = m_regs.P.C ? 0x80 : 0x00;
+        uint8_t shifted_value  = (value >> 1) | incoming_carry;
+        m_regs.P.C             = (value & 0x01) != 0;
+
+        writeRamByte(status.operand.u16, shifted_value);
+        m_regs.P.Z = (shifted_value == 0);
+        m_regs.P.N = (shifted_value & 0x80) != 0;
+        return postExecHook(status, 6);
+      } else if (status->getAddrMode() == 0x04) /* ??? */ {
+      } else if (status->getAddrMode() == 0x05) /* ROR zp,X */ {
+        status << Mnemonic::ROR << AddrMode::ZeroPageX << readPC<uint8_t>() << preExecHook(status);
+
+        uint16_t target_addr = static_cast<uint8_t>(status.operand.u8 + m_regs.X);
 
         uint8_t value = readRamByte(target_addr);
 
@@ -584,10 +816,12 @@ uint8_t CPU6502::handleShift(Instruction inst) {
         writeRamByte(target_addr, shifted_value);
         m_regs.P.Z = (shifted_value == 0);
         m_regs.P.N = (shifted_value & 0x80) != 0;
-        return 6;
-      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x05) /* ROR zp,X */ {
-        uint16_t target_addr = static_cast<uint8_t>(readPC<uint8_t>() + m_regs.X);
+        return postExecHook(status, 6);
+      } else if (status->getAddrMode() == 0x06) /* ??? */ {
+      } else if (status->getAddrMode() == 0x07) /* ROR abs,X */ {
+        status << Mnemonic::ROR << AddrMode::AbsoluteX << readPC<uint16_t>() << preExecHook(status);
+
+        uint16_t target_addr = status.operand.u16 + m_regs.X;
 
         uint8_t value = readRamByte(target_addr);
 
@@ -598,172 +832,186 @@ uint8_t CPU6502::handleShift(Instruction inst) {
         writeRamByte(target_addr, shifted_value);
         m_regs.P.Z = (shifted_value == 0);
         m_regs.P.N = (shifted_value & 0x80) != 0;
-        return 6;
-      } else if (inst.getAddrMode() == 0x06) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x07) /* ROR abs,X */ {
-        auto const operand = readPC<uint16_t>();
-
-        uint16_t target_addr = operand + m_regs.X;
-
-        uint8_t value = readRamByte(target_addr);
-
-        uint8_t incoming_carry = m_regs.P.C ? 0x80 : 0x00;
-        uint8_t shifted_value  = (value >> 1) | incoming_carry;
-        m_regs.P.C             = (value & 0x01) != 0;
-
-        writeRamByte(target_addr, shifted_value);
-        m_regs.P.Z = (shifted_value == 0);
-        m_regs.P.N = (shifted_value & 0x80) != 0;
-        return 7;
+        return postExecHook(status, 7);
       }
     } break;
     case 0x04: { // Transfers
-      if (inst.getAddrMode() == 0x00) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x01) /* STX zp */ {
-        writeRamByte(readPC<uint8_t>(), m_regs.X);
-        return 3;
-      } else if (inst.getAddrMode() == 0x02) /* TXA */ {
+      if (status->getAddrMode() == 0x00) /* ??? */ {
+      } else if (status->getAddrMode() == 0x01) /* STX zp */ {
+        status << Mnemonic::STX << AddrMode::ZeroPage << readPC<uint8_t>() << preExecHook(status);
+
+        writeRamByte(status.operand.u8, m_regs.X);
+        return postExecHook(status, 3);
+      } else if (status->getAddrMode() == 0x02) /* TXA */ {
+        status << Mnemonic::TXA << preExecHook(status);
+
         m_regs.A   = m_regs.X;
         m_regs.P.Z = m_regs.A == 0;
         m_regs.P.N = (m_regs.A & 0x80) > 0;
-        return 2;
-      } else if (inst.getAddrMode() == 0x03) /* STX abs */ {
-        writeRamByte(readPC<uint16_t>(), m_regs.X);
-        return 4;
-      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x05) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x06) /* TXS */ {
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x03) /* STX abs */ {
+        status << Mnemonic::STX << AddrMode::Absolute << readPC<uint16_t>() << preExecHook(status);
+
+        writeRamByte(status.operand.u16, m_regs.X);
+        return postExecHook(status, 4);
+      } else if (status->getAddrMode() == 0x04) /* ??? */ {
+      } else if (status->getAddrMode() == 0x05) /* ??? */ {
+      } else if (status->getAddrMode() == 0x06) /* TXS */ {
+        status << Mnemonic::TXS << preExecHook(status);
+
         m_regs.SP = m_regs.X;
-        return 2;
-      } else if (inst.getAddrMode() == 0x07) /* ??? */ {
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x07) /* ??? */ {
       }
     } break;
     case 0x05: {
       uint8_t value = 0, cycles = 1;
 
-      if (inst.getAddrMode() == 0x00) /* LDX imm */ {
-        value = readPC<uint8_t>();
+      if (status->getAddrMode() == 0x00) /* LDX imm */ {
+        status << Mnemonic::LDX << AddrMode::Immediate << readPC<uint8_t>() << preExecHook(status);
+
+        value = status.operand.u8;
         cycles += 1;
-      } else if (inst.getAddrMode() == 0x01) /* LDX zp */ {
-        value = readRamByte(readPC<uint8_t>());
+      } else if (status->getAddrMode() == 0x01) /* LDX zp */ {
+        status << Mnemonic::LDX << AddrMode::ZeroPage << readPC<uint8_t>() << preExecHook(status);
+
+        value = readRamByte(status.operand.u8);
         cycles += 2;
-      } else if (inst.getAddrMode() == 0x02) /* TAX */ {
+      } else if (status->getAddrMode() == 0x02) /* TAX */ {
+        status << Mnemonic::TAX << preExecHook(status);
+
         value = m_regs.A;
         cycles += 1;
-      } else if (inst.getAddrMode() == 0x03) /* LDX abs */ {
-        value = readRamByte(readPC<uint16_t>());
+      } else if (status->getAddrMode() == 0x03) /* LDX abs */ {
+        status << Mnemonic::LDX << AddrMode::Absolute << readPC<uint16_t>() << preExecHook(status);
+
+        value = readRamByte(status.operand.u16);
         cycles += 3;
-      } else if (inst.getAddrMode() == 0x04) /* JAM */ {
+      } else if (status->getAddrMode() == 0x04) /* JAM */ {
         throw 1;
-      } else if (inst.getAddrMode() == 0x05) /* LDX zp,Y */ {
-        value = readRamByte(static_cast<uint8_t>(readPC<uint8_t>() + m_regs.Y));
+      } else if (status->getAddrMode() == 0x05) /* LDX zp,Y */ {
+        status << Mnemonic::LDX << AddrMode::ZeroPageY << readPC<uint8_t>() << preExecHook(status);
+
+        value = readRamByte(static_cast<uint8_t>(status.operand.u8 + m_regs.Y));
         cycles += 3;
-      } else if (inst.getAddrMode() == 0x06) /* TSX */ {
+      } else if (status->getAddrMode() == 0x06) /* TSX */ {
+        status << Mnemonic::TSX << preExecHook(status);
+
         value = m_regs.SP;
         cycles += 1;
-      } else if (inst.getAddrMode() == 0x07) /* LDX abs,Y */ {
-        auto const operand = readPC<uint16_t>();
+      } else if (status->getAddrMode() == 0x07) /* LDX abs,Y */ {
+        status << Mnemonic::LDX << AddrMode::AbsoluteY << readPC<uint16_t>() << preExecHook(status);
 
-        auto target_addr = operand + m_regs.Y;
+        auto target_addr = status.operand.u16 + m_regs.Y;
 
         value = readRamByte(target_addr);
         cycles += 3;
-        if ((operand & 0xFF00) != (target_addr & 0xFF00)) {
+        if ((status.operand.u16 & 0xFF00) != (target_addr & 0xFF00)) {
           cycles += 1;
         }
-      } else {
-        throw UnhandledInstruction(inst.raw);
       }
 
       m_regs.X   = value;
       m_regs.P.Z = m_regs.X == 0;
       m_regs.P.N = (m_regs.X & 0x80) > 0;
-      return cycles;
+      return postExecHook(status, cycles);
     } break;
     case 0x06: {
-      if (inst.getAddrMode() == 0x00) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x01) /* DEC zp */ {
-        auto const operand = readPC<uint8_t>();
+      if (status->getAddrMode() == 0x00) /* ??? */ {
+      } else if (status->getAddrMode() == 0x01) /* DEC zp */ {
+        status << Mnemonic::DEC << AddrMode::ZeroPage << readPC<uint8_t>() << preExecHook(status);
 
-        auto const res = writeRamByte(operand, readRamByte(operand) - 1);
+        auto const res = writeRamByte(status.operand.u8, readRamByte(status.operand.u8) - 1);
 
         m_regs.P.Z = res == 0;
         m_regs.P.N = (res & 0x80) > 0;
-        return 5;
-      } else if (inst.getAddrMode() == 0x02) /* DEX */ {
+        return postExecHook(status, 5);
+      } else if (status->getAddrMode() == 0x02) /* DEX */ {
+        status << Mnemonic::DEX << preExecHook(status);
+
         m_regs.X -= 1;
         m_regs.P.Z = m_regs.X == 0;
         m_regs.P.N = (m_regs.X & 0x80) > 0;
-        return 2;
-      } else if (inst.getAddrMode() == 0x03) /* DEC abs */ {
-        auto const operand = readPC<uint16_t>();
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x03) /* DEC abs */ {
+        status << Mnemonic::DEC << AddrMode::Absolute << readPC<uint16_t>() << preExecHook(status);
 
-        auto const res = writeRamByte(operand, readRamByte(operand) - 1);
+        auto const res = writeRamByte(status.operand.u16, readRamByte(status.operand.u16) - 1);
 
         m_regs.P.Z = res == 0;
         m_regs.P.N = (res & 0x80) > 0;
-        return 6;
-      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x05) /* DEC zp,X */ {
-        auto const addr = static_cast<uint8_t>(readPC<uint8_t>() + m_regs.X);
+        return postExecHook(status, 6);
+      } else if (status->getAddrMode() == 0x04) /* ??? */ {
+      } else if (status->getAddrMode() == 0x05) /* DEC zp,X */ {
+        status << Mnemonic::DEC << AddrMode::ZeroPageX << readPC<uint8_t>() << preExecHook(status);
+
+        auto const addr = static_cast<uint8_t>(status.operand.u8 + m_regs.X);
         auto const res  = writeRamByte(addr, readRamByte(addr) - 1);
 
         m_regs.P.Z = res == 0;
         m_regs.P.N = (res & 0x80) > 0;
-        return 7;
-      } else if (inst.getAddrMode() == 0x06) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x07) /* DEC abs,X */ {
-        auto const addr = readPC<uint16_t>() + m_regs.X;
+        return postExecHook(status, 7);
+      } else if (status->getAddrMode() == 0x06) /* ??? */ {
+      } else if (status->getAddrMode() == 0x07) /* DEC abs,X */ {
+        status << Mnemonic::DEC << AddrMode::AbsoluteX << readPC<uint16_t>() << preExecHook(status);
+
+        auto const addr = status.operand.u16 + m_regs.X;
         auto const res  = writeRamByte(addr, readRamByte(addr) - 1);
 
         m_regs.P.Z = res == 0;
         m_regs.P.N = (res & 0x80) > 0;
-        return 7;
+        return postExecHook(status, 7);
       }
     } break;
     case 0x07: {
-      if (inst.getAddrMode() == 0x00) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x01) /* INC zp */ {
-        auto const operand = readPC<uint8_t>();
+      if (status->getAddrMode() == 0x00) /* ??? */ {
+      } else if (status->getAddrMode() == 0x01) /* INC zp */ {
+        status << Mnemonic::INC << AddrMode::ZeroPage << readPC<uint8_t>() << preExecHook(status);
 
-        auto const res = writeRamByte(operand, readRamByte(operand) + 1);
-
-        m_regs.P.Z = res == 0;
-        m_regs.P.N = (res & 0x80) > 0;
-        return 5;
-      } else if (inst.getAddrMode() == 0x02) /* NOP */ {
-        return 2;
-      } else if (inst.getAddrMode() == 0x03) /* INC abs */ {
-        auto const operand = readPC<uint16_t>();
-
-        auto const res = writeRamByte(operand, readRamByte(operand) + 1);
+        auto const res = writeRamByte(status.operand.u8, readRamByte(status.operand.u8) + 1);
 
         m_regs.P.Z = res == 0;
         m_regs.P.N = (res & 0x80) > 0;
-        return 6;
-      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x05) /* INC zp,X */ {
-        auto const addr = static_cast<uint8_t>(readPC<uint8_t>() + m_regs.X);
+        return postExecHook(status, 5);
+      } else if (status->getAddrMode() == 0x02) /* NOP */ {
+        status << Mnemonic::NOP << preExecHook(status);
+
+        return postExecHook(status, 2);
+      } else if (status->getAddrMode() == 0x03) /* INC abs */ {
+        status << Mnemonic::INC << AddrMode::Absolute << readPC<uint16_t>() << preExecHook(status);
+
+        auto const res = writeRamByte(status.operand.u16, readRamByte(status.operand.u16) + 1);
+
+        m_regs.P.Z = res == 0;
+        m_regs.P.N = (res & 0x80) > 0;
+        return postExecHook(status, 6);
+      } else if (status->getAddrMode() == 0x04) /* ??? */ {
+      } else if (status->getAddrMode() == 0x05) /* INC zp,X */ {
+        status << Mnemonic::INC << AddrMode::ZeroPageX << readPC<uint8_t>() << preExecHook(status);
+
+        auto const addr = static_cast<uint8_t>(status.operand.u8 + m_regs.X);
 
         auto const res = writeRamByte(addr, readRamByte(addr) + 1);
 
         m_regs.P.Z = res == 0;
         m_regs.P.N = (res & 0x80) > 0;
-        return 5;
-      } else if (inst.getAddrMode() == 0x06) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x07) /* INC abs,X */ {
-        auto const addr = readPC<uint16_t>() + m_regs.X;
+        return postExecHook(status, 5);
+      } else if (status->getAddrMode() == 0x06) /* ??? */ {
+      } else if (status->getAddrMode() == 0x07) /* INC abs,X */ {
+        status << Mnemonic::INC << AddrMode::AbsoluteX << readPC<uint16_t>() << preExecHook(status);
+
+        auto const addr = status.operand.u16 + m_regs.X;
 
         auto const res = writeRamByte(addr, readRamByte(addr) + 1);
 
         m_regs.P.Z = res == 0;
         m_regs.P.N = (res & 0x80) > 0;
-        return 7;
+        return postExecHook(status, 7);
       }
     } break;
   }
 
-  throw UnhandledInstruction(inst.raw);
+  throw UnhandledInstruction();
 }
 
 uint8_t CPU6502::step() {
@@ -781,12 +1029,30 @@ uint8_t CPU6502::step() {
     return 7;
   }
 
-  Instruction inst(readPC<uint8_t>());
-  switch (inst.deflt.instclass) {
-    case InstClass::Control: return handleControl(inst);
-    case InstClass::Math: return handleMath(inst);
-    case InstClass::Shift: return handleShift(inst);
-    default: throw UnhandledInstruction(inst.raw);
+  static InstructionStatus prev;
+
+  InstructionStatus s {
+      .startAddr = m_regs.PC,
+      .holder    = readPC<uint8_t>(),
+      .operand   = {},
+      .flags     = {},
+  };
+
+  try {
+    if (m_hook) m_hook(s);
+    uint8_t cycles = 0;
+    switch (s.holder.deflt.instclass) {
+      case InstClass::Control: cycles = handleControl(s); break;
+      case InstClass::Math: cycles = handleMath(s); break;
+      case InstClass::Shift: cycles = handleShift(s); break;
+      default: throw UnhandledInstruction();
+    }
+    prev = s;
+    return cycles;
+  } catch (UnhandledInstruction const& ex) {
+    if (!m_hook) throw ex; // Rethrow if hook is not installed
+    s.flags.stage = ExecStage::FailExec;
+    m_hook(s);
   }
 }
 
@@ -799,7 +1065,7 @@ uint8_t CPU6502::writeRamByte(uint16_t addr, uint8_t value) {
   if (auto handler = findHandler(addr); isValidHandler(handler)) {
     return handler->second(true, addr, value);
   }
-  return m_ram[addr] = value;
+  return m_ram.at(addr) = value;
 }
 
 uint8_t CPU6502::readRamByte(uint16_t addr) const {
@@ -807,5 +1073,17 @@ uint8_t CPU6502::readRamByte(uint16_t addr) const {
   if (auto handler = findHandler(addr); isValidHandler(handler)) {
     return handler->second(false, addr, 0);
   }
-  return m_ram[addr];
+  return m_ram.at(addr);
+}
+
+bool CPU6502::preExecHook(InstructionStatus& status) {
+  status.flags.stage = ExecStage::PreExec;
+  if (m_hook) m_hook(status);
+  return true;
+}
+
+uint8_t CPU6502::postExecHook(InstructionStatus& status, uint8_t cycles) {
+  status.flags.stage = ExecStage::PostExec, status.flags.cycles = cycles;
+  if (m_hook) m_hook(status);
+  return status.flags.cycles;
 }

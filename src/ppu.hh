@@ -1,15 +1,15 @@
 #pragma once
 
 #include "cpu.hh"
-#include "ines.hh"
 #include "mmu.hh"
 #include "palette.hh"
 
 #include <cstdint>
+#include <span>
 
 class PPU: public MMU {
   public:
-  PPU(CPU6502& c, iNES& i);
+  PPU(CPU6502& c);
   ~PPU();
 
   uint8_t cpuRead(uint16_t addr);
@@ -53,7 +53,6 @@ class PPU: public MMU {
   uint8_t  m_addrLatch  = 0;
   uint8_t  m_fineX      = 0;
   uint8_t  m_readBuffer = 0;
-  uint8_t  m_readBuff   = 0;
 
   uint16_t m_cycle, m_scanline;
 

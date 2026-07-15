@@ -9,6 +9,7 @@
 constexpr double TARGET_FRAMETIME = 1.0 / 60.0988;
 
 int main(int argc, char* argv[]) {
+#ifndef PENES_NO_SDL
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
     std::cerr << "Failed to initialize SDL: " << SDL_GetError() << std::endl;
     return 1;
@@ -30,14 +31,20 @@ int main(int argc, char* argv[]) {
     return 4;
   }
   SDL_SetRenderVSync(rend, 1);
+#endif
+
+  if (argc < 2) {
+    std::cerr << "Usage: " << argv[0] << " </path/to/application.nes>" << std::endl;
+    return 5;
+  }
 
   iNES cartridge(argv[1]);
   if (!cartridge.get()->isNTSC()) {
     std::cerr << "Only NTSC cartridges are supported atm" << std::endl;
-    return 5;
+    return 6;
   }
   CPU6502 cpu;
-  PPU     ppu(cpu, cartridge);
+  PPU     ppu(cpu);
 
   union PadState {
     struct {
@@ -51,7 +58,7 @@ int main(int argc, char* argv[]) {
       uint8_t right  : 1;
     };
 
-    uint8_t _raw;
+    uint8_t _raw = 0;
 
     uint8_t getFirstBtnState() const { return a; }
 
@@ -107,7 +114,7 @@ int main(int argc, char* argv[]) {
   });
 
   // PPU CHR handler
-  ppu.addRangeHandler({0x0000, 0x1FFF}, [&, chr = nullptr](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
+  ppu.addRangeHandler({0x0000, 0x1FFF}, [&](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
     auto const romAddr = cartridge.getMapper()->resolvePPU(addr);
     if (romAddr == 0) /* No CHR data in cartridge */ {
       auto const chrRam = ppu.prepareCHRMemory();
@@ -119,17 +126,19 @@ int main(int argc, char* argv[]) {
     return cartridge->data[romAddr];
   });
 
+  cpu.setHook(CPU6502::TesterHook);
+
   if (cartridge->isVerticalMirror()) ppu.setVerticalMirroring();
   cpu.reset();
 
   auto       lastTime = SDL_GetPerformanceCounter();
   auto const perfFreq = static_cast<double>(SDL_GetPerformanceFrequency());
 
-  bool   stopped    = false;
-  double nextUpdate = 0.0, lag = 0.0;
+  bool   stopped = false;
+  double lag     = 0.0;
   while (!stopped) {
     Uint64 currentTime = SDL_GetPerformanceCounter();
-    lag += static_cast<double>(currentTime - lastTime) / SDL_GetPerformanceFrequency();
+    lag += static_cast<double>(currentTime - lastTime) / perfFreq;
     lastTime = currentTime;
 
     while (lag >= TARGET_FRAMETIME) {
@@ -185,16 +194,21 @@ int main(int argc, char* argv[]) {
       lag -= TARGET_FRAMETIME;
     }
 
+#ifndef PENES_NO_SDL
     auto frame = ppu.getFrame();
     SDL_UpdateTexture(tex, nullptr, frame.data(), 256 * 4);
     SDL_RenderClear(rend);
     SDL_RenderTexture(rend, tex, nullptr, nullptr);
     SDL_RenderPresent(rend);
+#endif
   }
+
+#ifndef PENES_NO_SDL
   SDL_DestroyTexture(tex);
   SDL_DestroyRenderer(rend);
   SDL_DestroyWindow(window);
   SDL_Quit();
+#endif
 
   return 0;
 }
