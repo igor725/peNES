@@ -528,7 +528,16 @@ uint8_t CPU6502::handleShift(Instruction inst) {
       } else if (inst.getAddrMode() == 0x04) /* ??? */ {
       } else if (inst.getAddrMode() == 0x05) /* ??? */ {
       } else if (inst.getAddrMode() == 0x06) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x07) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x07) /* LSR abs,X */ {
+        auto const operand = readPC<uint16_t>() + m_regs.X;
+
+        auto orig = readRamByte(operand);
+        auto wr   = writeRamByte(operand, orig >> 1);
+
+        m_regs.P.N = 0;
+        m_regs.P.Z = wr == 0;
+        m_regs.P.C = (orig & 0x01) != 0;
+        return 7;
       }
     } break;
     case 0x03: {

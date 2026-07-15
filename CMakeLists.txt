@@ -9,6 +9,8 @@ add_executable(peNES
 	src/ines.cpp
 	src/ppu.cpp
 	src/mmu.cpp
+	src/mappers/mmc0.cpp
+	src/mappers/mmc1.cpp
 )
 
 target_link_libraries(peNES PRIVATE SDL3::SDL3)

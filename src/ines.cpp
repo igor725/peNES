@@ -1,5 +1,7 @@
 #include "ines.hh"
 
+#include "mappers/mapper.hh"
+
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -23,15 +25,28 @@ iNES::iNES(const char* filename) {
     throw;
   }
 
+  m_size = sb.st_size;
   ::close(file);
+
+  switch (m_file->getMapperId()) {
+    case 0x00: m_mapper = createMMC0(this); break;
+
+    case 0x01:
+    case 0x69:
+    case 0x9b: m_mapper = createMMC1(this); break;
+
+    default: throw;
+  }
 }
 
-iNES::~iNES() {}
+iNES::~iNES() {
+  ::munmap(m_file, m_size);
+}
 
 uint16_t iNES::resolveCPU(uint16_t addr) const {
   if (addr >= 0x8000 /* Start of PRG */) {
     addr &= 0x7FFF;
-    if (m_file->hdr.prg_size == 1) addr %= PRG_BLOCK_SIZE; // Mirror PRG if only one bank available
+    if (m_file->hdr.progSize == 1) addr %= PRG_BLOCK_SIZE; // Mirror PRG if only one bank available
     if (m_file->hdr.flags6.trainer) addr += TRAINER_BLOCK_SIZE;
     return addr;
   }
@@ -41,8 +56,8 @@ uint16_t iNES::resolveCPU(uint16_t addr) const {
 
 uint16_t iNES::resolvePPU(uint16_t addr) const {
   if (addr <= 0x1FFF /* End of CHR */) {
-    if (m_file->hdr.chr_size == 0) return 0;
-    addr += m_file->hdr.prg_size * PRG_BLOCK_SIZE;
+    if (m_file->hdr.charSize == 0) return 0;
+    addr += m_file->hdr.progSize * PRG_BLOCK_SIZE;
     if (m_file->hdr.flags6.trainer) addr += TRAINER_BLOCK_SIZE;
     return addr;
   }

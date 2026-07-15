@@ -36,10 +36,6 @@ int main(int argc, char* argv[]) {
     std::cerr << "Only NTSC cartridges are supported atm" << std::endl;
     return 5;
   }
-  if (cartridge->getMapperId() != 0x00) {
-    std::cerr << "Only Mapper 0 cartridges are supported atm" << std::endl;
-    return 6;
-  }
   CPU6502 cpu;
   PPU     ppu(cpu, cartridge);
 
@@ -81,19 +77,6 @@ int main(int argc, char* argv[]) {
     return value;
   });
 
-  // PPU CHR handler
-  ppu.addRangeHandler({0x0000, 0x1FFF}, [&, chr = nullptr](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
-    auto const romAddr = cartridge.resolvePPU(addr);
-    if (romAddr == 0) /* No CHR data in cartridge */ {
-      auto const chrRam = ppu.prepareCHRMemory();
-      if (isWrite) return chrRam[addr] = value;
-      return chrRam[addr];
-    }
-
-    // Skip all writes
-    return cartridge->data[romAddr];
-  });
-
   // Gamepad handler
   cpu.addRangeHandler({0x4016, 0x4017}, [&padBtns, &padShift, latch = false](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
     if (isWrite) {
@@ -119,8 +102,20 @@ int main(int argc, char* argv[]) {
 
   // PRG-ROM handler
   cpu.addRangeHandler({0x8000, 0xFFFF}, [&](bool isWrite, uint16_t addr, uint8_t value) -> uint8_t {
-    // We're ignoring writes here completely
-    auto const romAddr = cartridge.resolveCPU(addr);
+    // Let mapper handle this stuff
+    return cartridge.getMapper()->cpuOperation(isWrite, addr, value);
+  });
+
+  // PPU CHR handler
+  ppu.addRangeHandler({0x0000, 0x1FFF}, [&, chr = nullptr](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
+    auto const romAddr = cartridge.getMapper()->resolvePPU(addr);
+    if (romAddr == 0) /* No CHR data in cartridge */ {
+      auto const chrRam = ppu.prepareCHRMemory();
+      if (isWrite) return chrRam[addr] = value;
+      return chrRam[addr];
+    }
+
+    // Skip all writes
     return cartridge->data[romAddr];
   });
 
@@ -149,12 +144,29 @@ int main(int argc, char* argv[]) {
           case SDL_EVENT_WINDOW_CLOSE_REQUESTED: {
             stopped = true;
           } break;
+          case SDL_EVENT_KEY_DOWN:
+            if (ev.key.scancode == SDL_SCANCODE_ESCAPE) cpu.reset();
+          case SDL_EVENT_KEY_UP: {
+            switch (ev.key.scancode) {
+              case SDL_SCANCODE_LEFT: padBtns[0].left = ev.type == SDL_EVENT_KEY_DOWN; break;
+              case SDL_SCANCODE_RIGHT: padBtns[0].right = ev.type == SDL_EVENT_KEY_DOWN; break;
+              case SDL_SCANCODE_UP: padBtns[0].up = ev.type == SDL_EVENT_KEY_DOWN; break;
+              case SDL_SCANCODE_DOWN: padBtns[0].down = ev.type == SDL_EVENT_KEY_DOWN; break;
+              case SDL_SCANCODE_X: padBtns[0].a = ev.type == SDL_EVENT_KEY_DOWN; break;
+              case SDL_SCANCODE_Z: padBtns[0].b = ev.type == SDL_EVENT_KEY_DOWN; break;
+              case SDL_SCANCODE_SPACE: padBtns[0].select = ev.type == SDL_EVENT_KEY_DOWN; break;
+              case SDL_SCANCODE_RETURN: padBtns[0].start = ev.type == SDL_EVENT_KEY_DOWN; break;
+              default: break;
+            }
+          } break;
           case SDL_EVENT_GAMEPAD_ADDED: {
             if (SDL_IsGamepad(ev.gdevice.which)) {
               SDL_OpenGamepad(ev.gdevice.which);
             }
           } break;
-          case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+          case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
+            if (ev.gbutton.button == SDL_GAMEPAD_BUTTON_NORTH) cpu.reset();
+          } /* Intentional fallthrough */
           case SDL_EVENT_GAMEPAD_BUTTON_UP: {
             switch (ev.gbutton.button) {
               case SDL_GAMEPAD_BUTTON_DPAD_LEFT: padBtns[0].left = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
