@@ -191,7 +191,7 @@ class CPU6502: public MMU {
 
     void operator<<(bool) { /* Dummy pre-exec result handler */ }
 
-    std::string buildMnemonic() const;
+    std::string buildMnemonic(bool withAddr = false) const;
   };
 
   using CPUHook = std::function<void(InstructionStatus&)>;
@@ -224,6 +224,8 @@ class CPU6502: public MMU {
 
   static void VerboseTesterHook(InstructionStatus& status);
   static void TesterHook(InstructionStatus& status);
+  static void HeatMapHook(InstructionStatus& status);
+  static void SetHeatMapReportThreshold(uint64_t th);
 
   void    reset();
   uint8_t step();

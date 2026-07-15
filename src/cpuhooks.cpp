@@ -1,6 +1,28 @@
 #include "cpu.hh"
 
+#include <cstdint>
 #include <iostream>
+#include <map>
+
+static std::map<uint16_t, uint64_t> HeatMap;
+static uint64_t                     ReportThreshold = 0;
+
+void CPU6502::HeatMapHook(InstructionStatus& status) {
+  switch (status.flags.stage) {
+    case ExecStage::PreExec: {
+      auto& hmEnt = HeatMap[status.startAddr];
+
+      hmEnt += 1;
+      if (hmEnt <= ReportThreshold) std::cerr << status.buildMnemonic(true) << " / " << hmEnt << std::endl;
+    } break;
+
+    default: break;
+  }
+}
+
+void CPU6502::SetHeatMapReportThreshold(uint64_t th) {
+  ReportThreshold = th;
+}
 
 void CPU6502::TesterHook(InstructionStatus& status) {
   static uint8_t tester = 0;

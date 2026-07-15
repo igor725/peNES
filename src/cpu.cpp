@@ -16,9 +16,11 @@ CPU6502::CPU6502(): MMU() {}
 
 CPU6502::~CPU6502() {}
 
-std::string CPU6502::InstructionStatus::buildMnemonic() const {
+std::string CPU6502::InstructionStatus::buildMnemonic(bool withAddr) const {
   std::string temp;
-  temp.reserve(10);
+  temp.reserve(withAddr ? 16 : 10);
+
+  if (withAddr) std::format_to(std::back_inserter(temp), "${:X} ", startAddr);
 
   switch (flags.mnemonic) {
     case Mnemonic::ADC: temp.append("ADC"); break;
@@ -1050,9 +1052,9 @@ uint8_t CPU6502::step() {
     prev = s;
     return cycles;
   } catch (UnhandledInstruction const& ex) {
-    if (!m_hook) throw ex; // Rethrow if hook is not installed
     s.flags.stage = ExecStage::FailExec;
-    m_hook(s);
+    if (m_hook) m_hook(s);
+    throw ex; // Rethrow if fail hook returned
   }
 }
 
