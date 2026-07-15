@@ -48,11 +48,13 @@ class PPU: public MMU {
     uint8_t status = 0;
   } m_reg;
 
-  uint8_t  m_oamAddr   = 0;
-  uint16_t m_vramAddr  = 0;
-  uint16_t m_tramAddr  = 0;
-  uint8_t  m_addrLatch = 0;
-  uint8_t  m_readBuff  = 0;
+  uint8_t  m_oamAddr    = 0;
+  uint16_t m_vramAddr   = 0;
+  uint16_t m_tramAddr   = 0;
+  uint8_t  m_addrLatch  = 0;
+  uint8_t  m_fineX      = 0;
+  uint8_t  m_readBuffer = 0;
+  uint8_t  m_readBuff   = 0;
 
   uint16_t m_cycle, m_scanline;
 

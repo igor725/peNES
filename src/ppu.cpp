@@ -69,17 +69,27 @@ void PPU::writeInternal(uint16_t addr, uint8_t value) {
 
 uint8_t PPU::cpuRead(uint16_t addr) {
   uint8_t data = 0;
+
   switch ((addr - 0x2000) % 8) {
-    case 2: {
+    case 0x02: {
       data = m_reg.status;
       m_reg.status &= ~0x80;
       m_addrLatch = 0;
     } break;
-    case 7: {
-      data = readInternal(m_vramAddr);
+    case 0x07 /* PPUDATA */: {
+      uint8_t data = m_readBuffer;
+      m_readBuffer = readInternal(m_vramAddr);
+
+      if (m_vramAddr >= 0x3F00) {
+        data         = readInternal(m_vramAddr);
+        m_readBuffer = readInternal(m_vramAddr - 0x1000);
+      }
+
       m_vramAddr += (m_reg.ctrl & 0x04) ? 32 : 1;
+      return data;
     } break;
   }
+
   return data;
 }
 
@@ -88,7 +98,7 @@ uint8_t PPU::dmaWrite(uint16_t addr, uint8_t value) {
     uint16_t cpuPageAddress = static_cast<uint16_t>(value) << 8;
 
     for (uint32_t i = 0; i < 256; i++) {
-      m_oam[m_oamAddr + i] = m_cpu.readRam<uint8_t>(cpuPageAddress + i);
+      m_oam[(m_oamAddr + i) & 0xFF] = m_cpu.readRam<uint8_t>(cpuPageAddress + i);
     }
   }
 
@@ -97,27 +107,39 @@ uint8_t PPU::dmaWrite(uint16_t addr, uint8_t value) {
 
 uint8_t PPU::cpuWrite(uint16_t addr, uint8_t value) {
   switch ((addr - 0x2000) % 8) {
-    case 0: m_reg.ctrl = value; break;
-    case 1: m_reg.mask = value; break;
+    case 0x00: m_reg.ctrl = value; break;
+    case 0x01: m_reg.mask = value; break;
 
-    case 3: m_oamAddr = value; break;
-    case 4: m_oam[m_oamAddr++] = value; break;
+    case 0x03: m_oamAddr = value; break;
+    case 0x04: m_oam[m_oamAddr++] = value; break;
 
-    case 6:
+    case 0x05 /* PPUSCROLL */: {
       if (m_addrLatch == 0) {
-        m_tramAddr  = (m_tramAddr & 0x00FF) | ((value & 0x3F) << 8);
+        m_fineX     = value & 0x07;
+        m_tramAddr  = (m_tramAddr & 0xFFE0) | (value >> 3);
+        m_addrLatch = 1;
+      } else {
+        m_tramAddr  = (m_tramAddr & 0x8FFF) | ((value & 0x07) << 12);
+        m_tramAddr  = (m_tramAddr & 0xFC1F) | ((value & 0xF8) << 2);
+        m_addrLatch = 0;
+      }
+    } break;
+
+    case 0x06 /* PPUADDR */: {
+      if (m_addrLatch == 0) {
+        m_tramAddr  = (m_tramAddr & 0x80FF) | ((value & 0x3F) << 8);
         m_addrLatch = 1;
       } else {
         m_tramAddr  = (m_tramAddr & 0xFF00) | value;
         m_vramAddr  = m_tramAddr;
         m_addrLatch = 0;
       }
-      break;
+    } break;
 
-    case 7:
+    case 0x07: {
       writeInternal(m_vramAddr, value);
       m_vramAddr += (m_reg.ctrl & 0x04) ? 32 : 1;
-      break;
+    } break;
   }
 
   return value;
@@ -149,77 +171,105 @@ void PPU::pixelEval() {
       bool bgEnabled     = (m_reg.mask & 0x08) != 0;
       bool spriteEnabled = (m_reg.mask & 0x10) != 0;
 
-      if (bgEnabled && spriteEnabled && !(m_reg.status & 0x40)) {
-        uint8_t spriteY     = m_oam[0];
-        uint8_t tileID0     = m_oam[1];
-        uint8_t attributes0 = m_oam[2];
-        uint8_t spriteX     = m_oam[3];
+      uint16_t attributeTableBase = nametableBase + 0x03C0;
+      uint16_t attrAddress        = attributeTableBase + ((tileY / 4) * 8) + (tileX / 4);
+      uint8_t  attrByte           = readInternal(attrAddress);
+      uint8_t  quadrantX          = (tileX % 4) / 2;
+      uint8_t  quadrantY          = (tileY % 4) / 2;
+      uint8_t  attrShift          = (quadrantY * 4) + (quadrantX * 2);
+      uint8_t  paletteSelect      = (attrByte >> attrShift) & 0x03;
 
-        uint8_t spriteHeight = (m_reg.ctrl & 0x20) ? 16 : 8;
+      uint8_t bgPixel   = bgEnabled ? pixelColorIndex : 0;
+      uint8_t bgPalette = paletteSelect;
 
-        if (m_scanline >= (spriteY + 1) && m_scanline < (spriteY + 1 + spriteHeight)) {
-          if (m_cycle >= spriteX && m_cycle < (spriteX + 8)) {
-            uint8_t spriteFineY = m_scanline - (spriteY + 1);
-            uint8_t spriteFineX = m_cycle - spriteX;
+      uint8_t fgPixel               = 0;
+      uint8_t fgPalette             = 0;
+      uint8_t fgPriority            = 0;
+      bool    spriteZeroHitPossible = false;
 
-            if (attributes0 & 0x80) {
-              spriteFineY = (spriteHeight - 1) - spriteFineY;
-            }
-            if (attributes0 & 0x40) {
-              spriteFineX = 7 - spriteFineX;
-            }
+      if (spriteEnabled) {
+        for (int i = 0; i < 64; ++i) {
+          uint8_t spriteY    = m_oam[i * 4 + 0];
+          uint8_t tileID     = m_oam[i * 4 + 1];
+          uint8_t attributes = m_oam[i * 4 + 2];
+          uint8_t spriteX    = m_oam[i * 4 + 3];
 
-            uint16_t sprPatternBase = 0;
-            uint8_t  sprTile        = tileID0;
+          uint8_t spriteHeight = (m_reg.ctrl & 0x20) ? 16 : 8;
 
-            if (spriteHeight == 16) {
-              sprPatternBase = (tileID0 & 0x01) ? 0x1000 : 0x0000;
-              sprTile &= 0xFE;
-              if (spriteFineY >= 8) {
-                sprTile |= 0x01;
-                spriteFineY -= 8;
-              }
-            } else {
-              sprPatternBase = (m_reg.ctrl & 0x08) ? 0x1000 : 0x0000;
-            }
+          if (m_scanline >= (spriteY + 1) && m_scanline < (spriteY + 1 + spriteHeight)) {
+            if (m_cycle >= spriteX && m_cycle < (spriteX + 8)) {
+              uint8_t spriteFineY = m_scanline - (spriteY + 1);
+              uint8_t spriteFineX = m_cycle - spriteX;
 
-            uint16_t sprPlane0Addr = sprPatternBase + (sprTile * 16) + spriteFineY;
-            uint8_t  sprPlane0     = readInternal(sprPlane0Addr);
-            uint8_t  sprPlane1     = readInternal(sprPlane0Addr + 8);
+              if (attributes & 0x80) spriteFineY = (spriteHeight - 1) - spriteFineY;
+              if (attributes & 0x40) spriteFineX = 7 - spriteFineX;
 
-            uint8_t sprBitShift   = 7 - spriteFineX;
-            uint8_t sprColorIndex = (((sprPlane1 >> sprBitShift) & 0x01) << 1) | ((sprPlane0 >> sprBitShift) & 0x01);
+              uint16_t sprPatternBase = 0;
+              uint8_t  sprTile        = tileID;
 
-            if (sprColorIndex != 0 && pixelColorIndex != 0) {
-              bool clipBG      = !(m_reg.mask & 0x02);
-              bool clipSprites = !(m_reg.mask & 0x04);
-
-              if (!(m_cycle < 8 && (clipBG || clipSprites))) {
-                if (m_cycle < 255) {
-                  m_reg.status |= 0x40;
+              if (spriteHeight == 16) {
+                sprPatternBase = (tileID & 0x01) ? 0x1000 : 0x0000;
+                sprTile &= 0xFE;
+                if (spriteFineY >= 8) {
+                  sprTile |= 0x01;
+                  spriteFineY -= 8;
                 }
+              } else {
+                sprPatternBase = (m_reg.ctrl & 0x08) ? 0x1000 : 0x0000;
+              }
+
+              uint16_t sprPlane0Addr = sprPatternBase + (sprTile * 16) + spriteFineY;
+              uint8_t  sprPlane0     = readInternal(sprPlane0Addr);
+              uint8_t  sprPlane1     = readInternal(sprPlane0Addr + 8);
+
+              uint8_t sprBitShift   = 7 - spriteFineX;
+              uint8_t sprColorIndex = (((sprPlane1 >> sprBitShift) & 0x01) << 1) | ((sprPlane0 >> sprBitShift) & 0x01);
+
+              if (sprColorIndex != 0) {
+                fgPixel    = sprColorIndex;
+                fgPalette  = (attributes & 0x03) + 4;
+                fgPriority = (attributes & 0x20) == 0;
+                if (i == 0) spriteZeroHitPossible = true;
+                break;
               }
             }
           }
         }
       }
 
-      uint16_t attributeTableBase = nametableBase + 0x03C0;
+      uint8_t finalPixel   = 0;
+      uint8_t finalPalette = 0;
 
-      uint16_t attrAddress = attributeTableBase + ((tileY / 4) * 8) + (tileX / 4);
-      uint8_t  attrByte    = readInternal(attrAddress);
+      if (bgPixel == 0 && fgPixel == 0) {
+        finalPixel   = 0;
+        finalPalette = 0;
+      } else if (bgPixel == 0 && fgPixel > 0) {
+        finalPixel   = fgPixel;
+        finalPalette = fgPalette;
+      } else if (bgPixel > 0 && fgPixel == 0) {
+        finalPixel   = bgPixel;
+        finalPalette = bgPalette;
+      } else if (bgPixel > 0 && fgPixel > 0) {
+        if (spriteZeroHitPossible) {
+          bool clipBG      = !(m_reg.mask & 0x02);
+          bool clipSprites = !(m_reg.mask & 0x04);
+          if (!(m_cycle < 8 && (clipBG || clipSprites)) && m_cycle < 255) {
+            m_reg.status |= 0x40;
+          }
+        }
 
-      uint8_t quadrantX     = (tileX % 4) / 2;
-      uint8_t quadrantY     = (tileY % 4) / 2;
-      uint8_t attrShift     = (quadrantY * 4) + (quadrantX * 2);
-      uint8_t paletteSelect = (attrByte >> attrShift) & 0x03;
+        if (fgPriority) {
+          finalPixel   = fgPixel;
+          finalPalette = fgPalette;
+        } else {
+          finalPixel   = bgPixel;
+          finalPalette = bgPalette;
+        }
+      }
 
-      uint16_t finalPaletteAddress = 0x3F00 + (paletteSelect << 2) + pixelColorIndex;
-      if (pixelColorIndex == 0) finalPaletteAddress = 0x3F00;
-
-      uint8_t nesColorByte = readInternal(finalPaletteAddress);
-
-      m_frameBuffer[(m_scanline * 256) + m_cycle] = m_colorPalette[nesColorByte & 0x3F];
+      uint16_t finalPaletteAddress = 0x3F00 + (finalPalette << 2) + finalPixel;
+      if (finalPixel == 0) finalPaletteAddress = 0x3F00;
+      m_frameBuffer[(m_scanline * 256) + m_cycle] = m_colorPalette[readInternal(finalPaletteAddress) & 0x3F];
     }
   } else if (m_scanline == 240) {
     // NOOP

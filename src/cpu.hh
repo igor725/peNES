@@ -64,6 +64,10 @@ class CPU6502: public MMU {
     uint8_t raw;
 
     uint8_t getAddrMode() const { return deflt.addrmode; }
+
+    Instruction(uint8_t r): raw(r) {}
+
+    Instruction(InstClass cl, uint8_t md, uint8_t op): deflt({cl, md, op}) {}
   };
 
   public:

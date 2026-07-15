@@ -49,21 +49,24 @@ uint8_t CPU6502::handleControl(Instruction inst) {
         pushStack<uint8_t>(p._raw);
         m_regs.PC = readRam<uint16_t>(0xFFFE);
         return 7;
+      } else if (inst.getAddrMode() == 0x01) /* NOP */ {
+        ++m_regs.PC;
+        return 2;
       } else if (inst.getAddrMode() == 0x02) /* PHP */ {
         auto p = m_regs.P;
 
         p.B = 1;
         pushStack<uint8_t>(p._raw);
         return 3;
-      } else if (inst.getAddrMode() == 0x01) /* NOP */ {
-        ++m_regs.PC;
-        return 2;
       } else if (inst.getAddrMode() == 0x03) /* NOP */ {
         readRam<uint16_t>(readPC<uint16_t>());
         return 4;
+      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x05) /* ??? */ {
       } else if (inst.getAddrMode() == 0x06) /* CLC */ {
         m_regs.P.C = 0;
         return 2;
+      } else if (inst.getAddrMode() == 0x07) /* CLC */ {
       }
     } break;
     case 0x01: {
@@ -88,9 +91,12 @@ uint8_t CPU6502::handleControl(Instruction inst) {
         m_regs.P.N = (test & 0x80) > 0;
         m_regs.P.V = (test & 0x40) > 0;
         return 4;
+      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x05) /* ??? */ {
       } else if (inst.getAddrMode() == 0x06) /* SEC */ {
         m_regs.P.C = 1;
         return 2;
+      } else if (inst.getAddrMode() == 0x07) /* ??? */ {
       }
     } break;
     case 0x02: {
@@ -98,25 +104,26 @@ uint8_t CPU6502::handleControl(Instruction inst) {
         m_regs.P._raw = (popStack<uint8_t>() & 0xEF) | 0x20;
         m_regs.PC     = popStack<uint16_t>();
         return 6;
-      } else if (inst.getAddrMode() == 0x01) {
+      } else if (inst.getAddrMode() == 0x01) /* ??? */ {
       } else if (inst.getAddrMode() == 0x02) /* PHA */ {
         pushStack<uint8_t>(m_regs.A);
         return 3;
       } else if (inst.getAddrMode() == 0x03) /* JMP abs */ {
         m_regs.PC = readPC<uint16_t>();
         return 3;
+      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x05) /* ??? */ {
       } else if (inst.getAddrMode() == 0x06) /* CLI */ {
         m_regs.P.I = 0;
         return 2;
+      } else if (inst.getAddrMode() == 0x07) /* ??? */ {
       }
     } break;
     case 0x03: {
       if (inst.getAddrMode() == 0x00) /* RTS */ {
         m_regs.PC = popStack<uint16_t>() + 1;
         return 6;
-      } else if (inst.getAddrMode() == 0x06) /* SEI */ {
-        m_regs.P.I = true;
-        return 2;
+      } else if (inst.getAddrMode() == 0x01) /* ??? */ {
       } else if (inst.getAddrMode() == 0x02) /* PLA */ {
         m_regs.A   = popStack<uint8_t>();
         m_regs.P.Z = m_regs.A == 0;
@@ -127,10 +134,18 @@ uint8_t CPU6502::handleControl(Instruction inst) {
         uint16_t high_addr = (low_addr & 0xFF00) | static_cast<uint8_t>((low_addr & 0xFF) + 1);
         m_regs.PC          = (readRamByte(high_addr) << 8) | readRamByte(low_addr);
         return 5;
+      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x05) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x06) /* SEI */ {
+        m_regs.P.I = true;
+        return 2;
+
+      } else if (inst.getAddrMode() == 0x07) /* ??? */ {
       }
     } break;
     case 0x04: {
-      if (inst.getAddrMode() == 0x01) /* STY zp */ {
+      if (inst.getAddrMode() == 0x00) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x01) /* STY zp */ {
         writeRamByte(readPC<uint8_t>(), m_regs.Y);
         return 3;
       } else if (inst.getAddrMode() == 0x02) /* DEY */ {
@@ -141,6 +156,7 @@ uint8_t CPU6502::handleControl(Instruction inst) {
       } else if (inst.getAddrMode() == 0x03) /* STY abs */ {
         writeRamByte(readPC<uint16_t>(), m_regs.Y);
         return 4;
+      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
       } else if (inst.getAddrMode() == 0x05) /* STY zp,X */ {
         writeRamByte(static_cast<uint8_t>(readPC<uint8_t>() + m_regs.X), m_regs.Y);
         return 4;
@@ -149,6 +165,7 @@ uint8_t CPU6502::handleControl(Instruction inst) {
         m_regs.P.Z = m_regs.A == 0;
         m_regs.P.N = (m_regs.A & 0x80) > 0;
         return 2;
+      } else if (inst.getAddrMode() == 0x07) /* ??? */ {
       }
     } break;
     case 0x05: {
@@ -172,11 +189,13 @@ uint8_t CPU6502::handleControl(Instruction inst) {
         m_regs.P.Z = m_regs.Y == 0;
         m_regs.P.N = (m_regs.Y & 0x80) > 0;
         return 4;
+      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
       } else if (inst.getAddrMode() == 0x05) /* LDY zp,X */ {
         m_regs.Y   = readRamByte(static_cast<uint8_t>(readPC<uint8_t>() + m_regs.X));
         m_regs.P.Z = m_regs.Y == 0;
         m_regs.P.N = (m_regs.Y & 0x80) > 0;
         return 4;
+      } else if (inst.getAddrMode() == 0x06) /* ??? */ {
       } else if (inst.getAddrMode() == 0x07) /* LDY abs,X */ {
         uint16_t base_addr   = readPC<uint16_t>();
         uint16_t target_addr = base_addr + m_regs.X;
@@ -209,9 +228,13 @@ uint8_t CPU6502::handleControl(Instruction inst) {
         m_regs.P.Z = m_regs.Y == 0;
         m_regs.P.N = (m_regs.Y & 0x80) > 0;
         return 2;
+      } else if (inst.getAddrMode() == 0x03) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x05) /* ??? */ {
       } else if (inst.getAddrMode() == 0x06) /* CLD */ {
         m_regs.P.D = false;
         return 2;
+      } else if (inst.getAddrMode() == 0x07) /* ??? */ {
       }
     } break;
     case 0x07: {
@@ -238,9 +261,13 @@ uint8_t CPU6502::handleControl(Instruction inst) {
         m_regs.P.Z = m_regs.X == 0;
         m_regs.P.N = (m_regs.X & 0x80) > 0;
         return 2;
+      } else if (inst.getAddrMode() == 0x03) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x05) /* ??? */ {
       } else if (inst.getAddrMode() == 0x06) /* SED */ {
         m_regs.P.D = 1;
         return 2;
+      } else if (inst.getAddrMode() == 0x07) /* ??? */ {
       }
     } break;
   }
@@ -364,7 +391,8 @@ uint8_t CPU6502::handleMath(Instruction inst) {
 uint8_t CPU6502::handleShift(Instruction inst) {
   switch (inst.deflt.operation) {
     case 0x00: {
-      if (inst.getAddrMode() == 0x01) /* ASL zp */ {
+      if (inst.getAddrMode() == 0x00) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x01) /* ASL zp */ {
         auto const operand = readPC<uint8_t>();
 
         auto orig = readRamByte(operand);
@@ -390,6 +418,7 @@ uint8_t CPU6502::handleShift(Instruction inst) {
         m_regs.P.Z = (res == 0);
         m_regs.P.N = (res & 0x80) > 0;
         return 6;
+      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
       } else if (inst.getAddrMode() == 0x05) /* ASL zp,X */ {
         uint8_t addr = static_cast<uint8_t>(readPC<uint8_t>() + m_regs.X);
         auto    orig = readRamByte(addr);
@@ -399,6 +428,7 @@ uint8_t CPU6502::handleShift(Instruction inst) {
         m_regs.P.Z = (res == 0);
         m_regs.P.N = (res & 0x80) > 0;
         return 6;
+      } else if (inst.getAddrMode() == 0x06) /* ??? */ {
       } else if (inst.getAddrMode() == 0x07) {
         auto addr = readPC<uint16_t>() + m_regs.X;
         auto orig = readRamByte(addr);
@@ -411,7 +441,8 @@ uint8_t CPU6502::handleShift(Instruction inst) {
       }
     } break;
     case 0x01: {
-      if (inst.getAddrMode() == 0x01) /* ROL zp */ {
+      if (inst.getAddrMode() == 0x00) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x01) /* ROL zp */ {
         auto const operand = readPC<uint8_t>();
 
         uint8_t value          = readRamByte(operand);
@@ -447,6 +478,7 @@ uint8_t CPU6502::handleShift(Instruction inst) {
         m_regs.P.Z = (shifted_value == 0);
         m_regs.P.N = (shifted_value & 0x80) != 0;
         return 6;
+      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
       } else if (inst.getAddrMode() == 0x05) /* ROL zp,X */ {
         uint8_t addr = static_cast<uint8_t>(readPC<uint8_t>() + m_regs.X);
 
@@ -461,10 +493,13 @@ uint8_t CPU6502::handleShift(Instruction inst) {
         m_regs.P.Z = (shifted_value == 0);
         m_regs.P.N = (shifted_value & 0x80) != 0;
         return 6;
+      } else if (inst.getAddrMode() == 0x06) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x07) /* ??? */ {
       }
     } break;
     case 0x02: {
-      if (inst.getAddrMode() == 0x01) /* LSR zp */ {
+      if (inst.getAddrMode() == 0x00) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x01) /* LSR zp */ {
         auto const operand = readPC<uint8_t>();
 
         auto orig = readRamByte(operand);
@@ -490,10 +525,16 @@ uint8_t CPU6502::handleShift(Instruction inst) {
         m_regs.P.Z = wr == 0;
         m_regs.P.C = (orig & 0x01) != 0;
         return 6;
+      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x05) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x06) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x07) /* ??? */ {
       }
     } break;
     case 0x03: {
-      if (inst.getAddrMode() == 0x02) /* ROR A */ {
+      if (inst.getAddrMode() == 0x00) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x01) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x02) /* ROR A */ {
         uint8_t incoming_carry = m_regs.P.C ? 0x80 : 0x00;
         uint8_t shifted_value  = (m_regs.A >> 1) | incoming_carry;
         m_regs.P.C             = (m_regs.A & 0x01) != 0;
@@ -502,6 +543,10 @@ uint8_t CPU6502::handleShift(Instruction inst) {
         m_regs.P.Z = (shifted_value == 0);
         m_regs.P.N = (shifted_value & 0x80) != 0;
         return 2;
+      } else if (inst.getAddrMode() == 0x03) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x05) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x06) /* ??? */ {
       } else if (inst.getAddrMode() == 0x07) /* ROR abs,X */ {
         auto const operand = readPC<uint16_t>();
 
@@ -517,6 +562,27 @@ uint8_t CPU6502::handleShift(Instruction inst) {
         m_regs.P.Z = (shifted_value == 0);
         m_regs.P.N = (shifted_value & 0x80) != 0;
         return 7;
+      }
+    } break;
+    case 0x04: { // Transfers
+      if (inst.getAddrMode() == 0x00) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x01) /* STX zp */ {
+        writeRamByte(readPC<uint8_t>(), m_regs.X);
+        return 3;
+      } else if (inst.getAddrMode() == 0x02) /* TXA */ {
+        m_regs.A   = m_regs.X;
+        m_regs.P.Z = m_regs.A == 0;
+        m_regs.P.N = (m_regs.A & 0x80) > 0;
+        return 2;
+      } else if (inst.getAddrMode() == 0x03) /* STX abs */ {
+        writeRamByte(readPC<uint16_t>(), m_regs.X);
+        return 4;
+      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x05) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x06) /* TXS */ {
+        m_regs.SP = m_regs.X;
+        return 2;
+      } else if (inst.getAddrMode() == 0x07) /* ??? */ {
       }
     } break;
     case 0x05: {
@@ -561,25 +627,9 @@ uint8_t CPU6502::handleShift(Instruction inst) {
       m_regs.P.N = (m_regs.X & 0x80) > 0;
       return cycles;
     } break;
-    case 0x04: { // Transfers
-      if (inst.getAddrMode() == 0x01) /* STX zp */ {
-        writeRamByte(readPC<uint8_t>(), m_regs.X);
-        return 3;
-      } else if (inst.getAddrMode() == 0x02) /* TXA */ {
-        m_regs.A   = m_regs.X;
-        m_regs.P.Z = m_regs.A == 0;
-        m_regs.P.N = (m_regs.A & 0x80) > 0;
-        return 2;
-      } else if (inst.getAddrMode() == 0x03) /* STX abs */ {
-        writeRamByte(readPC<uint16_t>(), m_regs.X);
-        return 4;
-      } else if (inst.getAddrMode() == 0x06) /* TXS */ {
-        m_regs.SP = m_regs.X;
-        return 2;
-      }
-    } break;
     case 0x06: {
-      if (inst.getAddrMode() == 0x01) /* DEC zp */ {
+      if (inst.getAddrMode() == 0x00) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x01) /* DEC zp */ {
         auto const operand = readPC<uint8_t>();
 
         auto const res = writeRamByte(operand, readRamByte(operand) - 1);
@@ -600,6 +650,7 @@ uint8_t CPU6502::handleShift(Instruction inst) {
         m_regs.P.Z = res == 0;
         m_regs.P.N = (res & 0x80) > 0;
         return 6;
+      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
       } else if (inst.getAddrMode() == 0x05) /* DEC zp,X */ {
         auto const addr = static_cast<uint8_t>(readPC<uint8_t>() + m_regs.X);
         auto const res  = writeRamByte(addr, readRamByte(addr) - 1);
@@ -607,6 +658,7 @@ uint8_t CPU6502::handleShift(Instruction inst) {
         m_regs.P.Z = res == 0;
         m_regs.P.N = (res & 0x80) > 0;
         return 7;
+      } else if (inst.getAddrMode() == 0x06) /* ??? */ {
       } else if (inst.getAddrMode() == 0x07) /* DEC abs,X */ {
         auto const addr = readPC<uint16_t>() + m_regs.X;
         auto const res  = writeRamByte(addr, readRamByte(addr) - 1);
@@ -617,7 +669,8 @@ uint8_t CPU6502::handleShift(Instruction inst) {
       }
     } break;
     case 0x07: {
-      if (inst.getAddrMode() == 0x01) /* INC zp */ {
+      if (inst.getAddrMode() == 0x00) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x01) /* INC zp */ {
         auto const operand = readPC<uint8_t>();
 
         auto const res = writeRamByte(operand, readRamByte(operand) + 1);
@@ -635,14 +688,24 @@ uint8_t CPU6502::handleShift(Instruction inst) {
         m_regs.P.Z = res == 0;
         m_regs.P.N = (res & 0x80) > 0;
         return 6;
+      } else if (inst.getAddrMode() == 0x04) /* ??? */ {
       } else if (inst.getAddrMode() == 0x05) /* INC zp,X */ {
-        auto addr = static_cast<uint8_t>(readPC<uint8_t>() + m_regs.X);
+        auto const addr = static_cast<uint8_t>(readPC<uint8_t>() + m_regs.X);
 
-        auto res = writeRamByte(addr, readRamByte(addr) + 1);
+        auto const res = writeRamByte(addr, readRamByte(addr) + 1);
 
         m_regs.P.Z = res == 0;
         m_regs.P.N = (res & 0x80) > 0;
         return 5;
+      } else if (inst.getAddrMode() == 0x06) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x07) /* INC abs,X */ {
+        auto const addr = readPC<uint16_t>() + m_regs.X;
+
+        auto const res = writeRamByte(addr, readRamByte(addr) + 1);
+
+        m_regs.P.Z = res == 0;
+        m_regs.P.N = (res & 0x80) > 0;
+        return 7;
       }
     } break;
   }
@@ -665,7 +728,7 @@ uint8_t CPU6502::step() {
     return 7;
   }
 
-  Instruction inst = {.raw = readPC<uint8_t>()};
+  Instruction inst(readPC<uint8_t>());
   switch (inst.deflt.instclass) {
     case InstClass::Control: return handleControl(inst);
     case InstClass::Math: return handleMath(inst);
