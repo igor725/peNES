@@ -5,7 +5,24 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <span>
+#include <exception>
+#include <filesystem>
+#include <string>
+
+class CartridgeException: public std::exception {
+  std::string m_what;
+
+  public:
+  enum class Type {
+    ValidateFail,
+    UnsupportedMapper,
+    UnmappedMemory,
+  };
+
+  CartridgeException(int32_t errorCode);
+
+  CartridgeException(Type type);
+};
 
 class iNES {
   struct File {
@@ -46,8 +63,6 @@ class iNES {
     bool isNTSC() const { return hdr.flipMode == 0; }
 
     bool isVerticalMirror() const { return hdr.flags6.mirroring == 1; }
-
-    std::span<uint8_t const> getPRG() const { return {data, PRG_BLOCK_SIZE * hdr.progSize}; }
   };
 
   public:
@@ -55,8 +70,10 @@ class iNES {
   static constexpr size_t CHR_BLOCK_SIZE     = 8192;
   static constexpr size_t TRAINER_BLOCK_SIZE = 512;
 
-  iNES(const char* filename);
+  iNES() = default;
   ~iNES();
+
+  void insert(std::filesystem::path const& path);
 
   File* get() const { return m_file; }
 
@@ -68,7 +85,7 @@ class iNES {
   uint16_t resolvePPU(uint16_t addr) const;
 
   private:
-  std::unique_ptr<Mapper> m_mapper;
-  File*                   m_file;
-  size_t                  m_size;
+  std::unique_ptr<Mapper> m_mapper = {};
+  File*                   m_file   = nullptr;
+  size_t                  m_size   = 0;
 };

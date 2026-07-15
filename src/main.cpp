@@ -38,11 +38,14 @@ int main(int argc, char* argv[]) {
     return 5;
   }
 
-  iNES cartridge(argv[1]);
-  if (!cartridge.get()->isNTSC()) {
-    std::cerr << "Only NTSC cartridges are supported atm" << std::endl;
+  iNES cartridge;
+  try {
+    cartridge.insert(argv[1]);
+  } catch (CartridgeException const& ex) {
+    std::cerr << "Failed to load specified cartridge file: " << ex.what() << std::endl;
     return 6;
   }
+
   CPU6502 cpu;
   PPU     ppu(cpu);
 
