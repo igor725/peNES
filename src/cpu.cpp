@@ -228,7 +228,15 @@ uint8_t CPU6502::handleControl(Instruction inst) {
         m_regs.P.Z = m_regs.Y == 0;
         m_regs.P.N = (m_regs.Y & 0x80) > 0;
         return 2;
-      } else if (inst.getAddrMode() == 0x03) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x03) /* CPY abs */ {
+        auto operand = readRamByte(readPC<uint16_t>());
+
+        uint8_t val = m_regs.Y - operand;
+
+        m_regs.P.C = m_regs.Y >= operand;
+        m_regs.P.Z = val == 0;
+        m_regs.P.N = (val & 0x80) > 0;
+        return 4;
       } else if (inst.getAddrMode() == 0x04) /* ??? */ {
       } else if (inst.getAddrMode() == 0x05) /* ??? */ {
       } else if (inst.getAddrMode() == 0x06) /* CLD */ {
@@ -578,7 +586,19 @@ uint8_t CPU6502::handleShift(Instruction inst) {
         m_regs.P.N = (shifted_value & 0x80) != 0;
         return 6;
       } else if (inst.getAddrMode() == 0x04) /* ??? */ {
-      } else if (inst.getAddrMode() == 0x05) /* ??? */ {
+      } else if (inst.getAddrMode() == 0x05) /* ROR zp,X */ {
+        uint16_t target_addr = static_cast<uint8_t>(readPC<uint8_t>() + m_regs.X);
+
+        uint8_t value = readRamByte(target_addr);
+
+        uint8_t incoming_carry = m_regs.P.C ? 0x80 : 0x00;
+        uint8_t shifted_value  = (value >> 1) | incoming_carry;
+        m_regs.P.C             = (value & 0x01) != 0;
+
+        writeRamByte(target_addr, shifted_value);
+        m_regs.P.Z = (shifted_value == 0);
+        m_regs.P.N = (shifted_value & 0x80) != 0;
+        return 6;
       } else if (inst.getAddrMode() == 0x06) /* ??? */ {
       } else if (inst.getAddrMode() == 0x07) /* ROR abs,X */ {
         auto const operand = readPC<uint16_t>();
