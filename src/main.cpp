@@ -15,7 +15,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  auto window = SDL_CreateWindow("peNES", 800, 600, 0);
+  auto window = SDL_CreateWindow("peNES", 800, 600, SDL_WINDOW_RESIZABLE);
   if (window == nullptr) {
     std::cerr << "Failed to create a window" << SDL_GetError() << std::endl;
     return 2;

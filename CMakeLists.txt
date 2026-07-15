@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(peNES LANGUAGES CXX)
-find_package(SDL3 REQUIRED)
+
 option(ENABLE_ALL_WARNINGS "Show all warnings (except useless ones)" FALSE)
 option(ENABLE_HEADLESS "Headless mode, no graphics or SDL whatsoever" FALSE)
 option(ENABLE_ASAN "Enable address santizier" FALSE)
@@ -21,6 +21,7 @@ add_executable(peNES
 if(ENABLE_HEADLESS)
 	target_compile_definitions(peNES PRIVATE PENES_NO_SDL)
 else()
+	find_package(SDL3 REQUIRED)
 	target_link_libraries(peNES PRIVATE SDL3::SDL3)
 endif()
 
