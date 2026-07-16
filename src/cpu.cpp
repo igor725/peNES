@@ -79,7 +79,7 @@ std::string CPU6502::InstructionStatus::buildMnemonic(bool withAddr) const {
     case Mnemonic::TXA: temp.append("TXA"); break;
     case Mnemonic::TXS: temp.append("TXS"); break;
     case Mnemonic::TYA: temp.append("TYA"); break;
-    default: std::format_to(std::back_inserter(temp), "${:X}", holder.raw); break;
+    default: std::format_to(std::back_inserter(temp), "${:02X}", holder.raw); break;
   }
 
   temp.push_back(' ');
@@ -387,11 +387,12 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
         return postExecHook(status, 2);
       } else if (status->getAddrMode() == 0x07) /* LDY abs,X */ {
         status << Mnemonic::LDY << AddrMode::AbsoluteX << readPC<uint16_t>() << preExecHook(status);
+        uint16_t const addr = status.operand.u16 + m_regs.X;
 
-        uint16_t target_addr = status.operand.u16 + m_regs.X;
-
-        m_regs.Y = readRamByte(target_addr);
-        return postExecHook(status, (status.operand.u16 & 0xFF00) == (target_addr & 0xFF00) ? 4 : 5);
+        m_regs.Y   = readRamByte(addr);
+        m_regs.P.Z = m_regs.Y == 0;
+        m_regs.P.N = (m_regs.Y & 0x80) > 0;
+        return postExecHook(status, (status.operand.u16 & 0xFF00) == (addr & 0xFF00) ? 4 : 5);
       }
     } break;
     case 0x06: {
@@ -678,7 +679,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
 
         cycles      = 6;
         origValue   = readRamByte(status.operand.u16);
-        resultValue = writeRamByte(status.operand.u16, resultValue << 1);
+        resultValue = writeRamByte(status.operand.u16, origValue << 1);
       } else if (status->getAddrMode() == 0x04) /* JAM */ {
         throw;
       } else if (status->getAddrMode() == 0x05) /* ASL zp,X */ {
@@ -883,6 +884,10 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
       } else if (status->getAddrMode() == 0x04) /* JAM */ {
         throw;
       } else if (status->getAddrMode() == 0x05) /* STX zp,Y */ {
+        status << Mnemonic::STX << AddrMode::Absolute << readPC<uint8_t>() << preExecHook(status);
+
+        writeRamByte(static_cast<uint8_t>(status.operand.u8 + m_regs.Y), m_regs.X);
+        return postExecHook(status, 4);
       } else if (status->getAddrMode() == 0x06) /* TXS */ {
         status << Mnemonic::TXS << preExecHook(status);
 
