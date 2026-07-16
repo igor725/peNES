@@ -16,7 +16,6 @@ CartridgeException::CartridgeException(Type type) {
   switch (type) {
     case Type::ValidateFail: m_what = "Failed to validate cartridge dump"; break;
     case Type::UnsupportedMapper: m_what = "Unsupported mapper"; break;
-    case Type::UnmappedMemory: m_what = "Unmapped cartridge memory region access"; break;
   }
 }
 
@@ -65,26 +64,4 @@ void iNES::insert(std::filesystem::path const& path) {
 
 iNES::~iNES() {
   ::munmap(m_file, m_size);
-}
-
-uint16_t iNES::resolveCPU(uint16_t addr) const {
-  if (addr >= 0x8000 /* Start of PRG */) {
-    addr &= 0x7FFF;
-    if (m_file->hdr.progSize == 1) addr %= PRG_BLOCK_SIZE; // Mirror PRG if only one bank available
-    if (m_file->hdr.flags6.trainer) addr += TRAINER_BLOCK_SIZE;
-    return addr;
-  }
-
-  throw CartridgeException(CartridgeException::Type::UnmappedMemory);
-}
-
-uint16_t iNES::resolvePPU(uint16_t addr) const {
-  if (addr <= 0x1FFF /* End of CHR */) {
-    if (m_file->hdr.charSize == 0) return 0;
-    addr += m_file->hdr.progSize * PRG_BLOCK_SIZE;
-    if (m_file->hdr.flags6.trainer) addr += TRAINER_BLOCK_SIZE;
-    return addr;
-  }
-
-  throw CartridgeException(CartridgeException::Type::UnmappedMemory);
 }

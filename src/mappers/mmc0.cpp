@@ -8,11 +8,25 @@ class MMC0: public Mapper {
   MMC0(iNES* c): Mapper(c) {}
 
   uint8_t cpuOperation(bool /* isWrite */, uint16_t addr, uint8_t /* value */) final { // We're ignoring writes here completely
-    auto const romAddr = m_cartridge->resolveCPU(addr);
-    return (*m_cartridge)->data[romAddr];
+    if (addr >= 0x8000 /* Start of PRG */) {
+      addr &= 0x7FFF;
+      if ((*m_cartridge)->hdr.progSize == 1) addr %= iNES::PRG_BLOCK_SIZE; // Mirror PRG if only one bank available
+      if ((*m_cartridge)->hdr.flags6.trainer) addr += iNES::TRAINER_BLOCK_SIZE;
+      return (*m_cartridge)->data[addr];
+    }
+
+    throw;
   }
 
-  std::optional<uint32_t> resolvePPU(uint16_t addr) const final { return (*m_cartridge).resolvePPU(addr); }
+  std::optional<uint32_t> resolvePPU(uint16_t addr) const final {
+    if (addr <= 0x1FFF /* End of CHR */ && (*m_cartridge)->hdr.charSize > 0) {
+      addr += (*m_cartridge)->hdr.progSize * iNES::PRG_BLOCK_SIZE;
+      if ((*m_cartridge)->hdr.flags6.trainer) addr += iNES::TRAINER_BLOCK_SIZE;
+      return addr;
+    }
+
+    return {};
+  }
 };
 
 std::unique_ptr<Mapper> createMMC0(iNES* c) {

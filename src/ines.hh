@@ -17,7 +17,6 @@ class CartridgeException: public std::exception {
   enum class Type {
     ValidateFail,
     UnsupportedMapper,
-    UnmappedMemory,
   };
 
   CartridgeException(int32_t errorCode);
@@ -86,8 +85,7 @@ class iNES {
 
   bool checkBounds(uint32_t addr) const { return addr < m_size; }
 
-  uint16_t resolveCPU(uint16_t addr) const;
-  uint16_t resolvePPU(uint16_t addr) const;
+  uint32_t resolveCPU(uint16_t addr) const;
 
   private:
   std::unique_ptr<Mapper> m_mapper = {};
