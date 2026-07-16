@@ -5,6 +5,7 @@
 
 #include <SDL3/SDL.h>
 #include <cassert>
+#include <cstdint>
 #include <iostream>
 
 constexpr double TARGET_FRAMETIME = 1.0 / 60.0988;
@@ -89,7 +90,7 @@ int main(int argc, char* argv[]) {
       if (apu.handleWrite(addr, value)) {
         return 0;
       } else if (addr == 0x4014) {
-        return ppu.dmaWrite(addr, value);
+        return ppu.dmaWrite(value);
       } else if (addr == 0x4016) {
         if ((latch = (value & 0x01)) == 0x01) {
           padShift[0] = padBtns[0];
@@ -142,7 +143,7 @@ int main(int argc, char* argv[]) {
   bool   stopped = false;
   double lag     = 0.0;
   while (!stopped) {
-    Uint64 currentTime = SDL_GetPerformanceCounter();
+    uint64_t currentTime = SDL_GetPerformanceCounter();
     lag += static_cast<double>(currentTime - lastTime) / perfFreq;
     lastTime = currentTime;
 
@@ -199,8 +200,8 @@ int main(int argc, char* argv[]) {
               case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: padBtns[0].right = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
               case SDL_GAMEPAD_BUTTON_DPAD_UP: padBtns[0].up = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
               case SDL_GAMEPAD_BUTTON_DPAD_DOWN: padBtns[0].down = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-              case SDL_GAMEPAD_BUTTON_LABEL_A: padBtns[0].a = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-              case SDL_GAMEPAD_BUTTON_LABEL_B: padBtns[0].b = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+              case SDL_GAMEPAD_BUTTON_SOUTH: padBtns[0].a = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+              case SDL_GAMEPAD_BUTTON_EAST: padBtns[0].b = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
               case SDL_GAMEPAD_BUTTON_BACK: padBtns[0].select = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
               case SDL_GAMEPAD_BUTTON_START: padBtns[0].start = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
             }

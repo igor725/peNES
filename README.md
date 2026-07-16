@@ -47,4 +47,4 @@ Keyboard bindings:
 * SDL3 (optional, headless run is possible)
 
 ## AI usage disclosure
-AI was used extensively to consult about NES' PPU and mappers architecture and summarize documentations, around 15-25% of PPU is vibe-coded (to save some time on tedious tasks) under my supervision, no code is left untouched by human hands. The rest of main architectural decisions, algorithms was made by me.
+AI was used extensively to consult about NES' PPU and mappers architecture and summarize documentations. All the main architectural decisions, algorithms were made by me.

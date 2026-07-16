@@ -111,6 +111,9 @@ void CPU6502::reset() {
   m_regs.P.C     = 1;
   m_regs.P.I     = 1;
   m_regs.P.D     = 0;
+  m_regs.A       = 0;
+  m_regs.X       = 0;
+  m_regs.Y       = 0;
   m_regs.SP      = 0xFF;
   m_regs.PC      = readRam<uint16_t>(0xFFFC);
 }
@@ -781,6 +784,12 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
       } else if (status->getAddrMode() == 0x04) /* JAM */ {
         throw;
       } else if (status->getAddrMode() == 0x05) /* LSR zp,X */ {
+        status << AddrMode::ZeroPageX << readPC<uint8_t>() << preExecHook(status);
+        auto const addr = static_cast<uint8_t>(status.operand.u8 + m_regs.X);
+
+        cycles      = 6;
+        origValue   = readRamByte(addr);
+        resultValue = writeRamByte(addr, origValue >> 1);
       } else if (status->getAddrMode() == 0x06) /* NOP impl (illegal) */ {
         status << Mnemonic::NOP << preExecHook(status);
         return postExecHook(status, 2);
