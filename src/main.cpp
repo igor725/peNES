@@ -169,6 +169,8 @@ int main(int argc, char* argv[]) {
               case SDL_SCANCODE_RETURN: padBtns[0].start = ev.type == SDL_EVENT_KEY_DOWN; break;
               case SDL_SCANCODE_H: cpu.setHook(CPU6502::HeatMapHook); break;
               case SDL_SCANCODE_T: cpu.setHook(CPU6502::TesterHook); break;
+              case SDL_SCANCODE_V: cpu.setHook(CPU6502::VerboseTesterHook); break;
+              case SDL_SCANCODE_R: cpu.setHook({}); break;
               case SDL_SCANCODE_F1: CPU6502::SetHeatMapReportThreshold(1); break;
               case SDL_SCANCODE_F2: CPU6502::SetHeatMapReportThreshold(10); break;
               case SDL_SCANCODE_F3: CPU6502::SetHeatMapReportThreshold(100); break;

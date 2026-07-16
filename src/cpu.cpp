@@ -528,8 +528,8 @@ uint8_t CPU6502::handleMath(InstructionStatus& status) {
       } break;
       case 0b100 /* (Indir),Y*/: {
         status << AddrMode::IndirIndexedY << readPC<uint8_t>() << preExecHook(status);
-        auto const base   = ((readRamByte(static_cast<uint8_t>(status.operand.u8 + 1)) << 8) | readRamByte(status.operand.u8));
-        auto const target = base + m_regs.Y;
+        uint16_t const base   = (readRamByte((status.operand.u8 + 1) & 0xFF) << 8) | readRamByte(status.operand.u8);
+        uint16_t const target = base + m_regs.Y;
         return {(base & 0xFF00) == (target & 0xFF00) ? 4 : 5, target};
       } break;
       case 0b101 /* Zero Page, X */: {
@@ -708,7 +708,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
     case 0x01: {
       uint8_t origValue = 0, resultValue = 0, cycles = 0;
 
-      status << CPU6502::Mnemonic::ROL;
+      status << Mnemonic::ROL;
       if (status->getAddrMode() == 0x00) /* JAM */ {
         throw;
       } else if (status->getAddrMode() == 0x01) /* ROL zp */ {

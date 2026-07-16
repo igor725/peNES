@@ -35,6 +35,13 @@ Keyboard bindings:
 * Arrows - Navigate
 * Z/X - Action buttons
 * Space/Enter - Select/Start options buttons
+* V - Apply verbose hook
+* T - Apply tester hook (validate CPU hook call sequence)
+* H - Apply heatmap hook
+* F1 - Set heatmap printing threshold to 1
+* F2 - Set heatmap printing threshold to 10
+* F3 - Set heatmap printing threshold to 100
+* R - Unset installed hook
 
 ## Dependencies
 * SDL3 (optional, headless run is possible)
