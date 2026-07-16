@@ -108,8 +108,6 @@ void CPU6502::reset() {
   m_nmiTriggered = false;
   m_irqTriggered = false;
   m_intrClrSchd  = false;
-  m_padButtons   = 0;
-  m_padCounter   = 0;
   m_regs.P.C     = 1;
   m_regs.P.I     = 1;
   m_regs.P.D     = 0;

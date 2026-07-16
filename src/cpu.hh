@@ -288,9 +288,7 @@ class CPU6502: public MMU {
     bool m_intrClrSchd  : 1;
   };
 
-  uint8_t m_padButtons, m_padCounter, m_resetTimer;
-
-  uint8_t m_padding[5];
+  uint8_t m_padding[7];
 
   std::array<uint8_t, 0x8000> m_ram;
   CPUHook                     m_hook;
