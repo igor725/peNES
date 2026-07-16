@@ -70,6 +70,7 @@ uint8_t PPU::cpuRead(uint16_t addr) {
   uint8_t data = 0;
 
   switch ((addr - 0x2000) % 8) {
+    case 0x01: data = m_oamAddr;
     case 0x02: {
       data = m_reg.status;
       m_reg.status &= ~0x80;
@@ -273,7 +274,7 @@ void PPU::pixelEval() {
   } else if (m_scanline >= 241 && m_scanline <= 260) {
     if (m_scanline == 241 && m_cycle == 1) {
       m_reg.status |= 0x80;
-      if (m_reg.ctrl & 0x80) m_cpu.triggerNmi();
+      if (m_reg.ctrl & 0x80) m_cpu.triggerNMI();
     }
   } else if (m_scanline == 261 && m_cycle == 1) {
     m_reg.status &= ~0xE0;

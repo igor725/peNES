@@ -10,9 +10,10 @@ option(ENABLE_MSAN "Enable memory santizier" FALSE)
 add_executable(peNES
 	src/main.cpp
 	src/cpu.cpp
-	src/ines.cpp
+	src/apu.cpp
 	src/ppu.cpp
 	src/mmu.cpp
+	src/ines.cpp
 	src/cpuhooks.cpp
 	src/mappers/mmc0.cpp
 	src/mappers/mmc1.cpp

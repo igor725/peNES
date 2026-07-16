@@ -14,7 +14,7 @@ class CPU6502: public MMU {
       uint8_t I : 1;
       uint8_t D : 1;
       uint8_t B : 1;
-      uint8_t U : 1;
+      uint8_t   : 1;
       uint8_t V : 1;
       uint8_t N : 1;
     };
@@ -225,6 +225,13 @@ class CPU6502: public MMU {
     }
   }
 
+  void pushStatus(bool software) {
+    auto p = m_regs.P;
+
+    p.B = software;
+    pushStack<uint8_t>(p._raw);
+  }
+
   static void VerboseTesterHook(InstructionStatus& status);
   static void TesterHook(InstructionStatus& status);
   static void HeatMapHook(InstructionStatus& status);
@@ -232,7 +239,8 @@ class CPU6502: public MMU {
 
   void    reset();
   uint8_t step();
-  void    triggerNmi();
+  void    triggerNMI();
+  void    triggerIRQ();
 
   void setHook(CPUHook&& hook) { m_hook = std::move(hook); }
 
@@ -263,6 +271,7 @@ class CPU6502: public MMU {
   uint8_t readRamByte(uint16_t addr) const;
   bool    preExecHook(InstructionStatus& status);
   uint8_t postExecHook(InstructionStatus& status, uint8_t cycles);
+  uint8_t interrupt(uint16_t vector, bool software = false);
 
   private:
   struct {
@@ -273,8 +282,13 @@ class CPU6502: public MMU {
     uint8_t  X, Y; // Indices
   } m_regs;
 
-  bool    m_nmitriggered;
-  uint8_t m_padButtons, m_padCounter;
+  struct {
+    bool m_nmiTriggered : 1;
+    bool m_irqTriggered : 1;
+    bool m_intrClrSchd  : 1;
+  };
+
+  uint8_t m_padButtons, m_padCounter, m_resetTimer;
 
   uint8_t m_padding[5];
 

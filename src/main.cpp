@@ -1,3 +1,4 @@
+#include "apu.hh"
 #include "cpu.hh"
 #include "ines.hh"
 #include "ppu.hh"
@@ -48,6 +49,7 @@ int main(int argc, char* argv[]) {
 
   CPU6502 cpu;
   PPU     ppu(cpu);
+  APU     apu(cpu);
 
   union PadState {
     struct {
@@ -81,33 +83,34 @@ int main(int argc, char* argv[]) {
     return ppu.cpuRead(addr);
   });
 
-  // PPU DMA handler
-  cpu.addRangeHandler({0x4014, 0x4014}, [&](bool isWrite, uint16_t addr, uint8_t value) -> uint8_t {
-    if (isWrite) return ppu.dmaWrite(addr, value);
-    return value;
-  });
-
-  // Gamepad handler
-  cpu.addRangeHandler({0x4016, 0x4017}, [&padBtns, &padShift, latch = false](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
+  // PPU, APU, I/O handler
+  cpu.addRangeHandler({0x4000, 0x4017}, [&, latch = false](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
     if (isWrite) {
-      if (addr == 0x4016) {
+      if (apu.handleWrite(addr, value)) {
+        return 0;
+      } else if (addr == 0x4014) {
+        return ppu.dmaWrite(addr, value);
+      } else if (addr == 0x4016) {
         if ((latch = (value & 0x01)) == 0x01) {
           padShift[0] = padBtns[0];
           padShift[1] = padBtns[1];
         }
+
+        return 0;
       }
 
-      return value;
+      throw;
     }
 
-    auto const pNum = addr == 0x4016 ? 0 : 1;
-    if (latch) {
-      return padBtns[pNum].getFirstBtnState();
-    } else {
+    if (auto res = apu.handleRead(addr); res.has_value()) {
+      return res.value();
+    } else if (addr >= 0x4016 && addr <= 0x4017) { // Read gamepad
+      auto const pNum = addr == 0x4016 ? 0 : 1;
+      if (latch) return padBtns[pNum].getFirstBtnState();
       return padShift[pNum].shift();
     }
 
-    return value;
+    throw;
   });
 
   // PRG-ROM handler
@@ -180,6 +183,11 @@ int main(int argc, char* argv[]) {
           case SDL_EVENT_GAMEPAD_ADDED: {
             if (SDL_IsGamepad(ev.gdevice.which)) {
               SDL_OpenGamepad(ev.gdevice.which);
+            }
+          } break;
+          case SDL_EVENT_GAMEPAD_REMOVED: {
+            if (auto pad = SDL_GetGamepadFromID(ev.gdevice.which)) {
+              SDL_CloseGamepad(pad);
             }
           } break;
           case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {

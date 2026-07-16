@@ -9,7 +9,7 @@ class UnhandledInstruction: public std::exception {
   public:
   UnhandledInstruction() {}
 
-  const char* what() const noexcept override { return ""; }
+  const char* what() const noexcept override { return "Attempt to execute an unknown instruction"; }
 };
 
 CPU6502::CPU6502(): MMU() {}
@@ -105,14 +105,25 @@ std::string CPU6502::InstructionStatus::buildMnemonic(bool withAddr) const {
 }
 
 void CPU6502::reset() {
-  m_nmitriggered = false;
+  m_nmiTriggered = false;
+  m_irqTriggered = false;
+  m_intrClrSchd  = false;
   m_padButtons   = 0;
   m_padCounter   = 0;
-  m_regs.P._raw  = 1;
-  m_regs.P.I     = true;
-  m_regs.P.D     = false;
+  m_regs.P.C     = 1;
+  m_regs.P.I     = 1;
+  m_regs.P.D     = 0;
   m_regs.SP      = 0xFF;
   m_regs.PC      = readRam<uint16_t>(0xFFFC);
+}
+
+uint8_t CPU6502::interrupt(uint16_t vector, bool software) {
+  pushStack<uint16_t>(m_regs.PC);
+  m_regs.P.I = 1;
+
+  pushStatus(software);
+  m_regs.PC = readRam<uint16_t>(vector);
+  return 7;
 }
 
 uint8_t CPU6502::handleControl(InstructionStatus& status) {
@@ -151,27 +162,14 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
   switch (status->deflt.operation) {
     case 0x00: { // Control Flow
       if (status->getAddrMode() == 0x00) /* BRK */ {
-        status << Mnemonic::BRK << preExecHook(status);
-
-        pushStack<uint16_t>(++m_regs.PC);
-        m_regs.P.I = 1;
-
-        auto p = m_regs.P;
-
-        p.B = 1;
-        pushStack<uint8_t>(p._raw);
-        m_regs.PC = readRam<uint16_t>(0xFFFE);
-        return postExecHook(status, 7);
+        status << Mnemonic::BRK << readPC<uint8_t>() << preExecHook(status);
+        return postExecHook(status, interrupt(0xFFFE, true));
       } else if (status->getAddrMode() == 0x01) /* NOP zp (illegal) */ {
         status << Mnemonic::NOP << AddrMode::ZeroPage << readPC<uint8_t>() << preExecHook(status);
         return postExecHook(status, 3);
       } else if (status->getAddrMode() == 0x02) /* PHP */ {
         status << Mnemonic::PHP << preExecHook(status);
-
-        auto p = m_regs.P;
-
-        p.B = 1;
-        pushStack<uint8_t>(p._raw);
+        pushStatus(true);
         return postExecHook(status, 3);
       } else if (status->getAddrMode() == 0x03) /* NOP abs (illegal) */ {
         status << Mnemonic::NOP << AddrMode::Absolute << readPC<uint16_t>() << preExecHook(status);
@@ -262,8 +260,7 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
         return postExecHook(status, 4);
       } else if (status->getAddrMode() == 0x06) /* CLI */ {
         status << Mnemonic::CLI << preExecHook(status);
-
-        m_regs.P.I = 0;
+        m_intrClrSchd = true;
         return postExecHook(status, 2);
       } else if (status->getAddrMode() == 0x07) /* NOP abs,X (illegal) */ {
         status << Mnemonic::NOP << AddrMode::AbsoluteX << readPC<uint16_t>() << preExecHook(status);
@@ -704,7 +701,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
       m_regs.P.C = (origValue & 0x80) > 0;
       m_regs.P.Z = (resultValue == 0);
       m_regs.P.N = (resultValue & 0x80) > 0;
-      return postExecHook(status, 5);
+      return postExecHook(status, cycles);
     } break;
     case 0x01: {
       uint8_t origValue = 0, resultValue = 0, cycles = 0;
@@ -1045,18 +1042,15 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
 }
 
 uint8_t CPU6502::step() {
-  if (m_nmitriggered) {
-    m_nmitriggered = false;
-
-    pushStack<uint16_t>(m_regs.PC);
-
-    Status _p = m_regs.P;
-    _p.B = 0, _p.U = 1;
-    pushStack<uint8_t>(_p._raw);
-
-    m_regs.P.I = 1;
-    m_regs.PC  = readRam<uint16_t>(0xFFFA);
-    return 7;
+  if (m_nmiTriggered) {
+    m_nmiTriggered = false;
+    return interrupt(0xFFFA, false);
+  } else if (m_regs.P.I == 1 && m_intrClrSchd) {
+    m_intrClrSchd = false;
+    m_regs.P.I    = 0;
+  } else if (m_regs.P.I == 0 && m_irqTriggered && !m_nmiTriggered) {
+    m_irqTriggered = false;
+    return interrupt(0xFFFE, false);
   }
 
   InstructionStatus s {
@@ -1081,8 +1075,12 @@ uint8_t CPU6502::step() {
   }
 }
 
-void CPU6502::triggerNmi() {
-  m_nmitriggered = true;
+void CPU6502::triggerNMI() {
+  m_nmiTriggered = true;
+}
+
+void CPU6502::triggerIRQ() {
+  m_irqTriggered = true;
 }
 
 uint8_t CPU6502::writeRamByte(uint16_t addr, uint8_t value) {
