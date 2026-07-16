@@ -205,7 +205,7 @@ void PPU::pixelEval() {
               uint16_t sprPatternBase = 0;
 
               if (spriteHeight == 16) {
-                sprPatternBase = (tileID & 0x01) ? 0x1000 : 0x0000;
+                sprPatternBase = (sprTile & 0x01) ? 0x1000 : 0x0000;
                 sprTile &= 0xFE;
                 if (spriteFineY >= 8) {
                   sprTile |= 0x01;

@@ -12,7 +12,7 @@ class MMC0: public Mapper {
     return (*m_cartridge)->data[romAddr];
   }
 
-  uint32_t resolvePPU(uint16_t addr) const final { return (*m_cartridge).resolvePPU(addr); }
+  std::optional<uint32_t> resolvePPU(uint16_t addr) const final { return (*m_cartridge).resolvePPU(addr); }
 };
 
 std::unique_ptr<Mapper> createMMC0(iNES* c) {

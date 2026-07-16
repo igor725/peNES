@@ -26,6 +26,7 @@ class CPU6502: public MMU {
     Control,
     Math,
     Shift,
+    Unknown,
   };
 
   union [[gnu::packed]] Instruction {
@@ -39,6 +40,8 @@ class CPU6502: public MMU {
       uint8_t sig  : 5;
       uint8_t cond : 1;
       uint8_t sel  : 2;
+
+      inline bool isValid() const { return sig == 0x10; }
     } branch;
 
     uint8_t raw;

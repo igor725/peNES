@@ -119,14 +119,15 @@ int main(int argc, char* argv[]) {
   // PPU CHR handler
   ppu.addRangeHandler({0x0000, 0x1FFF}, [&](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
     auto const romAddr = cartridge.getMapper()->resolvePPU(addr);
-    if (romAddr == 0) /* No CHR data in cartridge */ {
+    if (!romAddr.has_value()) /* No CHR data in cartridge */ {
       auto const chrRam = ppu.prepareCHRMemory();
       if (isWrite) return chrRam[addr] = value;
       return chrRam[addr];
     }
 
     // Skip all writes
-    return cartridge->data[romAddr];
+    if (!cartridge.checkBounds(*romAddr)) throw;
+    return cartridge->data[*romAddr];
   });
 
   if (cartridge->isVerticalMirror()) ppu.setVerticalMirroring();

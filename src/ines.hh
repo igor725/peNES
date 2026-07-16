@@ -2,6 +2,7 @@
 
 #include "mappers/mapper.hh"
 
+#include <SDL3/SDL_stdinc.h>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -80,6 +81,8 @@ class iNES {
   auto operator->() const { return m_file; }
 
   auto getMapper() const { return m_mapper.get(); }
+
+  bool checkBounds(uint32_t addr) const { return addr < m_size; }
 
   uint16_t resolveCPU(uint16_t addr) const;
   uint16_t resolvePPU(uint16_t addr) const;

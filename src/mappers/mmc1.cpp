@@ -52,14 +52,16 @@ class MMC1: public Mapper {
     return 0;
   }
 
-  uint32_t resolvePPU(uint16_t addr) const final {
+  std::optional<uint32_t> resolvePPU(uint16_t addr) const final {
+    if ((*m_cartridge)->hdr.charSize == 0) return {};
+
     if (addr <= 0x0FFF) {
       return m_charBaseOff + m_chrOff0 + (addr & 0x0FFF);
     } else if (addr >= 0x1000 && addr <= 0x1FFF) {
       return m_charBaseOff + m_chrOff1 + (addr & 0x0FFF);
     }
 
-    throw;
+    return {};
   }
 
   private:
@@ -75,8 +77,8 @@ class MMC1: public Mapper {
 
   uint32_t m_prgOff0 = 0;
   uint32_t m_prgOff1 = 0;
-  uint32_t m_chrOff0 = 0;
-  uint32_t m_chrOff1 = 0;
+  uint32_t m_chrOff0 = 0x0000;
+  uint32_t m_chrOff1 = 0x1000;
 
   void updateOffsets() {
     if (((m_ctlReg >> 4) & 0x01) /* chrMode */ == 0) {
