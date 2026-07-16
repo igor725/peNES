@@ -4,13 +4,12 @@
 
 #include <cstring>
 #include <fcntl.h>
-#include <iterator>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 CartridgeException::CartridgeException(int32_t errorCode) {
-  std::format_to(std::back_inserter(m_what), "Cartridge load system error: {}", ::strerror(errorCode));
+  m_what = ::strerror(errorCode);
 }
 
 CartridgeException::CartridgeException(Type type) {

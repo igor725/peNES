@@ -23,6 +23,8 @@ class CartridgeException: public std::exception {
   CartridgeException(int32_t errorCode);
 
   CartridgeException(Type type);
+
+  const char* what() const noexcept override { return m_what.c_str(); }
 };
 
 class iNES {
