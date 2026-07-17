@@ -40,13 +40,9 @@ class CPU6502: public MMU {
       uint8_t sig  : 5;
       uint8_t cond : 1;
       uint8_t sel  : 2;
-
-      inline bool isValid() const { return sig == 0x10; }
     } branch;
 
     uint8_t raw;
-
-    uint8_t getAddrMode() const { return deflt.addrmode; }
 
     Instruction(): raw(0) {}
 
@@ -87,7 +83,6 @@ class CPU6502: public MMU {
   };
 
   enum class Mnemonic : uint8_t {
-    UNK,
     ADC,
     AND,
     ASL,
@@ -144,58 +139,76 @@ class CPU6502: public MMU {
     TXA,
     TXS,
     TYA,
+
+    /* Illegal opcodes */
+    UNK,
+    SHY,
+    SHX,
   };
 
-  struct InstructionStatus {
+  struct [[gnu::packed]] InstructionStatus {
     uint16_t    startAddr = 0;
     Instruction holder    = {};
-    AddrMode    addrMode  = AddrMode::Implied;
     Operand     operand   = {};
 
     struct [[gnu::packed]] {
-      Mnemonic  mnemonic    : 8 = Mnemonic::UNK;
-      ExecStage stage       : 2 = ExecStage::PreParse;
-      bool      addrModeSet : 1 = false;
-      bool      operandSet  : 1 = false;
-      uint8_t   cycles      : 4 = 0;
+      Mnemonic  mnemonic : 8 = Mnemonic::UNK;
+      AddrMode  addrMode : 4 = AddrMode::Implied;
+      ExecStage stage    : 2 = ExecStage::PreParse;
+      uint8_t   cycles   : 4 = 0;
+      bool      isLegal  : 1 = false;
     } flags = {};
 
-    inline Instruction* operator->() { return &holder; }
-
     InstructionStatus& operator<<(Mnemonic mn) {
-      flags.addrModeSet = true, flags.mnemonic = mn;
+      flags.mnemonic = mn, flags.isLegal = static_cast<uint32_t>(mn) < static_cast<uint32_t>(Mnemonic::UNK);
       return *this;
     }
 
     InstructionStatus& operator<<(AddrMode md) {
-      flags.addrModeSet = true, addrMode = md;
+      flags.addrMode = md;
       return *this;
     }
 
     InstructionStatus& operator<<(uint8_t op) {
-      flags.operandSet = true, operand.u8 = op;
+      operand.u8 = op;
       return *this;
     }
 
     InstructionStatus& operator<<(int8_t op) {
-      flags.operandSet = true, operand.s8 = op;
+      operand.s8 = op;
       return *this;
     }
 
     InstructionStatus& operator<<(uint16_t op) {
-      flags.operandSet = true, operand.u16 = op;
+      operand.u16 = op;
       return *this;
     }
 
     InstructionStatus& operator<<(int16_t op) {
-      flags.operandSet = true, operand.s16 = op;
+      operand.s16 = op;
       return *this;
     }
 
     void operator<<(bool) { /* Dummy pre-exec result handler */ }
 
+    inline InstClass getClass() const { return holder.deflt.instclass; }
+
+    inline uint8_t getOpCode() const { return holder.deflt.operation; }
+
+    inline uint8_t getAddrMode() const { return holder.deflt.addrmode; }
+
+    inline uint8_t getBranchingSelection() const { return holder.branch.sel; }
+
+    inline uint8_t getBranchingCondition() const { return holder.branch.cond; }
+
+    inline uint8_t getRawInstructionByte() const { return holder.raw; }
+
+    inline bool isBranching() const { return holder.branch.sig == 0x10; }
+
     std::string buildMnemonic(bool withAddr = false) const;
   };
+
+  static_assert(sizeof(InstructionStatus) == 8);
 
   using CPUHook = std::function<void(InstructionStatus&)>;
 
@@ -267,6 +280,7 @@ class CPU6502: public MMU {
   uint8_t handleControl(InstructionStatus& status);
   uint8_t handleMath(InstructionStatus& status);
   uint8_t handleShift(InstructionStatus& status);
+  uint8_t handleUnknown(InstructionStatus& status);
   uint8_t writeRamByte(uint16_t addr, uint8_t value);
   uint8_t readRamByte(uint16_t addr) const;
   bool    preExecHook(InstructionStatus& status);

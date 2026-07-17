@@ -71,9 +71,9 @@ uint8_t PPU::cpuRead(uint16_t addr) {
 
   switch ((addr - 0x2000) % 8) {
     case 0x01: data = m_oamAddr; break;
-    case 0x02: {
-      data = m_reg.status;
-      m_reg.status &= ~STATUS_VBLANK;
+    case 0x02 /* PPUSTATUS */: {
+      data = m_regs.S;
+      m_regs.S &= ~STATUS_VBLANK;
       m_addrLatch = 0;
     } break;
     case 0x07 /* PPUDATA */: {
@@ -85,7 +85,7 @@ uint8_t PPU::cpuRead(uint16_t addr) {
         m_readBuffer = readInternal(m_vramAddr - 0x1000);
       }
 
-      m_vramAddr += (m_reg.ctrl & CTRL_VRAM_INCREMENT) ? 32 : 1;
+      m_vramAddr += (m_regs.C & CTRL_VRAM_INCREMENT) ? 32 : 1;
     } break;
   }
 
@@ -105,11 +105,11 @@ uint8_t PPU::dmaWrite(uint8_t value) {
 uint8_t PPU::cpuWrite(uint16_t addr, uint8_t value) {
   switch ((addr - 0x2000) % 8) {
     case 0x00: /* PPUCTRL */ {
-      m_reg.ctrl = value;
+      m_regs.C   = value;
       m_tramAddr = (m_tramAddr & 0xF3FF) | ((value & 0x03) << 10);
     } break;
     case 0x01: /* PPUMASK */ {
-      m_reg.mask = value;
+      m_regs.M = value;
     } break;
 
     case 0x03: m_oamAddr = value; break;
@@ -140,7 +140,7 @@ uint8_t PPU::cpuWrite(uint16_t addr, uint8_t value) {
 
     case 0x07: {
       writeInternal(m_vramAddr, value);
-      m_vramAddr += (m_reg.ctrl & 0x04) ? 32 : 1;
+      m_vramAddr += (m_regs.C & 0x04) ? 32 : 1;
     } break;
   }
 
@@ -148,24 +148,24 @@ uint8_t PPU::cpuWrite(uint16_t addr, uint8_t value) {
 }
 
 void PPU::step() {
-  if (m_reg.mask & (MASK_DRAW_SPRITE | MASK_DRAW_BG)) {
+  if (m_regs.M & (MASK_DRAW_SPRITE | MASK_DRAW_BG)) {
     if (m_scanline < 240) {
       if (m_cycle <= 255 || (m_cycle >= 320 && m_cycle <= 340)) {
         if (m_cycle <= 255) {
           uint8_t bgColor = 0;
           uint8_t palette = 0;
 
-          if (m_reg.mask & MASK_DRAW_BG) {
-            if (m_cycle >= 8 || (m_reg.mask & MASK_BG_LC_CLIP)) {
+          if (m_regs.M & MASK_DRAW_BG) {
+            if (m_cycle >= 8 || (m_regs.M & MASK_BG_LC_CLIP)) {
               bgColor = (m_shiftHigh >> (14 - m_fineX) & 2) | (m_shiftLow >> (15 - m_fineX) & 1);
               palette = m_shiftAt >> (28 - m_fineX * 2) & 12;
             }
           }
 
           uint8_t renderColor = bgColor;
-          if (m_reg.mask & MASK_DRAW_SPRITE) {
+          if (m_regs.M & MASK_DRAW_SPRITE) {
             for (uint8_t i = 0; i < 64; ++i) {
-              uint16_t spriteHeight  = m_reg.ctrl & CTRL_TALL_SPRITE ? 16 : 8;
+              uint16_t spriteHeight  = m_regs.C & CTRL_TALL_SPRITE ? 16 : 8;
               uint16_t spriteY       = m_scanline - m_oam[i * 4 + 0] - 1;
               uint16_t spriteAttribs = m_oam[i * 4 + 2];
               uint16_t spriteX       = m_cycle - m_oam[i * 4 + 3];
@@ -183,7 +183,7 @@ void PPU::step() {
 
                   sprAddr = tableBit | tileIndex | rowOffset;
                 } else {
-                  uint16_t tableBit  = (m_reg.ctrl & 0x08) << 9;
+                  uint16_t tableBit  = (m_regs.C & CTRL_SPR_TAB_ADDR) << 9;
                   uint16_t tileIndex = sprTile << 4;
 
                   sprAddr = tableBit | tileIndex;
@@ -191,9 +191,9 @@ void PPU::step() {
                 sprAddr |= (sy & 7);
 
                 if (uint16_t spriteColor = (readInternal(sprAddr + 8) >> sx << 1 & 2) | (readInternal(sprAddr) >> sx & 1)) {
-                  if (!(m_cycle < 8 && !(m_reg.mask & MASK_SPRITE_LC_CLIP))) {
+                  if (!(m_cycle < 8 && !(m_regs.M & MASK_SPRITE_LC_CLIP))) {
                     if (i == 0 && bgColor != 0 && m_cycle < 255) {
-                      m_reg.status |= STATUS_SPRITE_ZERO_HIT;
+                      m_regs.S |= STATUS_SPRITE_ZERO_HIT;
                     }
 
                     if (!((spriteAttribs & SPRITE_PRIO) && bgColor != 0)) {
@@ -217,7 +217,7 @@ void PPU::step() {
           m_shiftLow *= 2;
         }
 
-        uint16_t const nameTabAddr = ((m_reg.ctrl & CTRL_BG_TAB_ADDR) ? 0x1000 : 0x0000) | (m_bgTile << 4) | (m_vramAddr >> 12);
+        uint16_t const nameTabAddr = ((m_regs.C & CTRL_BG_TAB_ADDR) ? 0x1000 : 0x0000) | (m_bgTile << 4) | (m_vramAddr >> 12);
         switch (m_cycle & 7) {
           case 1: m_bgTile = readInternal(0x2000 | (m_vramAddr & 0x0FFF)); break;
           case 3: {
@@ -262,11 +262,11 @@ void PPU::step() {
 
   if (m_cycle == 1) {
     if (m_scanline == 241) {
-      m_reg.status |= STATUS_VBLANK;
-      if (m_reg.ctrl & CTRL_GEN_NMI) m_cpu.triggerNMI();
+      m_regs.S |= STATUS_VBLANK;
+      if (m_regs.C & CTRL_GEN_NMI) m_cpu.triggerNMI();
       m_frameReady = true;
     }
-    if (m_scanline == 261) m_reg.status = 0;
+    if (m_scanline == 261) m_regs.S = 0;
   }
 
   if (++m_cycle == 341) {

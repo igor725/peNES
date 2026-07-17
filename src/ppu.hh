@@ -62,10 +62,10 @@ class PPU: public MMU {
   Palette m_colorPalette;
 
   struct {
-    uint8_t ctrl   = 0;
-    uint8_t mask   = 0;
-    uint8_t status = 0;
-  } m_reg;
+    uint8_t C = 0;
+    uint8_t M = 0;
+    uint8_t S = 0;
+  } m_regs;
 
   uint16_t m_shiftHigh  = 0;
   uint16_t m_shiftLow   = 0;
