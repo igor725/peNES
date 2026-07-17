@@ -12,6 +12,11 @@ class UnhandledInstruction: public std::exception {
   const char* what() const noexcept override { return "Attempt to execute an unknown instruction"; }
 };
 
+class SkipInstruction: public std::exception {
+  public:
+  SkipInstruction() {}
+};
+
 CPU6502::CPU6502(): MMU() {}
 
 CPU6502::~CPU6502() {}
@@ -79,6 +84,27 @@ std::string CPU6502::InstructionStatus::buildMnemonic(bool withAddr) const {
     case Mnemonic::TXA: temp.append("TXA"); break;
     case Mnemonic::TXS: temp.append("TXS"); break;
     case Mnemonic::TYA: temp.append("TYA"); break;
+
+    case Mnemonic::SLO: temp.append("SLO"); break;
+    case Mnemonic::RLA: temp.append("RLA"); break;
+    case Mnemonic::SRE: temp.append("SRE"); break;
+    case Mnemonic::RRA: temp.append("RRA"); break;
+    case Mnemonic::SAX: temp.append("SAX"); break;
+    case Mnemonic::LAX: temp.append("LAX"); break;
+    case Mnemonic::DCP: temp.append("DCP"); break;
+    case Mnemonic::ISC: temp.append("ISC"); break;
+    case Mnemonic::SHA: temp.append("SHA"); break;
+    case Mnemonic::SHS: temp.append("SHS"); break;
+    case Mnemonic::SHY: temp.append("SHY"); break;
+    case Mnemonic::SHX: temp.append("SHX"); break;
+    case Mnemonic::LAE: temp.append("LAE"); break;
+    case Mnemonic::ANC: temp.append("ANC"); break;
+    case Mnemonic::ASR: temp.append("ASR"); break;
+    case Mnemonic::ARR: temp.append("ARR"); break;
+    case Mnemonic::ANE: temp.append("ANE"); break;
+    case Mnemonic::LXA: temp.append("LXA"); break;
+    case Mnemonic::AXS: temp.append("AXS"); break;
+
     default: std::format_to(std::back_inserter(temp), "${:02X}", holder.raw); break;
   }
 
@@ -86,18 +112,18 @@ std::string CPU6502::InstructionStatus::buildMnemonic(bool withAddr) const {
 
   switch (flags.addrMode) {
     case AddrMode::Accum: temp.push_back('A');
-    case AddrMode::Absolute: std::format_to(std::back_inserter(temp), "${:X}", operand.u16); break;
-    case AddrMode::AbsoluteX: std::format_to(std::back_inserter(temp), "${:X},X", operand.u16); break;
-    case AddrMode::AbsoluteY: std::format_to(std::back_inserter(temp), "${:X},Y", operand.u16); break;
+    case AddrMode::Absolute: std::format_to(std::back_inserter(temp), "a${:X}", operand.u16); break;
+    case AddrMode::AbsoluteX: std::format_to(std::back_inserter(temp), "a${:X},X", operand.u16); break;
+    case AddrMode::AbsoluteY: std::format_to(std::back_inserter(temp), "a${:X},Y", operand.u16); break;
     case AddrMode::Immediate: std::format_to(std::back_inserter(temp), "#${:X}", operand.u8); break;
     case AddrMode::Implied: temp.append("impl"); break;
     case AddrMode::Indirect: std::format_to(std::back_inserter(temp), "(${:X})", operand.u16); break;
     case AddrMode::IndexedXIndir: std::format_to(std::back_inserter(temp), "(${:X},X)", operand.u8); break;
     case AddrMode::IndirIndexedY: std::format_to(std::back_inserter(temp), "(${:X}),Y", operand.u8); break;
-    case AddrMode::Relative: std::format_to(std::back_inserter(temp), "${:X}", operand.s8); break;
-    case AddrMode::ZeroPage: std::format_to(std::back_inserter(temp), "${:X}", operand.u8); break;
-    case AddrMode::ZeroPageX: std::format_to(std::back_inserter(temp), "${:X},X", operand.u8); break;
-    case AddrMode::ZeroPageY: std::format_to(std::back_inserter(temp), "${:X},Y", operand.u8); break;
+    case AddrMode::Relative: std::format_to(std::back_inserter(temp), "r${:X}", operand.s8); break;
+    case AddrMode::ZeroPage: std::format_to(std::back_inserter(temp), "z${:X}", operand.u8); break;
+    case AddrMode::ZeroPageX: std::format_to(std::back_inserter(temp), "z${:X},X", operand.u8); break;
+    case AddrMode::ZeroPageY: std::format_to(std::back_inserter(temp), "z${:X},Y", operand.u8); break;
     default: temp.append("???"); break;
   }
 
@@ -1138,16 +1164,46 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
   throw UnhandledInstruction();
 }
 
-uint8_t CPU6502::handleUnknown(InstructionStatus& status) {
-  // switch (status.getOpCode()) {
-  //   case 0x00: {
-  //     switch (status.getAddrMode()) {
-  //       case 0x00: {
+uint8_t CPU6502::handleUnknown(InstructionStatus& status) { /* All instructions below are illegal */
+  const auto addrMode = [](uint8_t opc, uint8_t am) -> AddrMode {
+    static AddrMode addrModes[] = {AddrMode::IndexedXIndir, AddrMode::ZeroPage,  AddrMode::Immediate, AddrMode::Absolute,
+                                   AddrMode::IndirIndexedY, AddrMode::ZeroPageX, AddrMode::AbsoluteY, AddrMode::AbsoluteX};
 
-  //       } break;
-  //     }
-  //   } break;
-  // }
+    if ((opc >= 0x04 && opc <= 0x05) && am == 0b101) return AddrMode::ZeroPageY;
+    if ((opc >= 0x05 && opc <= 0x05) && am == 0b111) return AddrMode::AbsoluteY;
+    if (opc == 0x04 && am == 0b111) return AddrMode::AbsoluteY;
+    return addrModes[am];
+  };
+
+  switch (status.getOpCode()) {
+    case 0x00: {
+      status << (status.getAddrMode() == 0b10 ? Mnemonic::ANC : Mnemonic::SLO) << addrMode(status.getOpCode(), status.getAddrMode());
+    } break;
+    case 0x01: {
+      status << (status.getAddrMode() == 0b10 ? Mnemonic::ANC : Mnemonic::RLA) << addrMode(status.getOpCode(), status.getAddrMode());
+    } break;
+    case 0x02: {
+      status << (status.getAddrMode() == 0b10 ? Mnemonic::ASR : Mnemonic::SRE) << addrMode(status.getOpCode(), status.getAddrMode());
+    } break;
+    case 0x03: {
+      status << (status.getAddrMode() == 0b10 ? Mnemonic::ARR : Mnemonic::RRA) << addrMode(status.getOpCode(), status.getAddrMode());
+    } break;
+    case 0x04: {
+      static Mnemonic mnemonics[] = {Mnemonic::SAX, Mnemonic::SAX, Mnemonic::ANE, Mnemonic::SAX, Mnemonic::SHA, Mnemonic::SAX, Mnemonic::SHS, Mnemonic::SHA};
+      status << mnemonics[status.getAddrMode()] << addrMode(status.getOpCode(), status.getAddrMode());
+    } break;
+    case 0x05: {
+      static Mnemonic mnemonics[] = {Mnemonic::LAX, Mnemonic::LAX, Mnemonic::LXA, Mnemonic::LAX, Mnemonic::LAX, Mnemonic::LAX, Mnemonic::LAE, Mnemonic::LAX};
+      status << mnemonics[status.getAddrMode()] << addrMode(status.getOpCode(), status.getAddrMode());
+    } break;
+    case 0x06: {
+      status << (status.getAddrMode() == 0b10 ? Mnemonic::AXS : Mnemonic::DCP) << addrMode(status.getOpCode(), status.getAddrMode());
+    } break;
+    case 0x07: {
+      status << (status.getAddrMode() == 0b10 ? Mnemonic::SBC : Mnemonic::ISC) << addrMode(status.getOpCode(), status.getAddrMode());
+    } break;
+  }
+
   return postExecHook(status, 0);
 }
 
@@ -1179,6 +1235,10 @@ uint8_t CPU6502::step() {
       case InstClass::Shift: return handleShift(s); break;
       case InstClass::Unknown: return handleUnknown(s);
     }
+  } catch (SkipInstruction const& ex) {
+    s.flags.stage = ExecStage::SkipExec;
+    if (m_hook) m_hook(s);
+    return 0;
   } catch (UnhandledInstruction const& ex) {
     s.flags.stage = ExecStage::FailExec;
     if (m_hook) m_hook(s);
@@ -1213,6 +1273,7 @@ uint8_t CPU6502::readRamByte(uint16_t addr) const {
 void CPU6502::preExecHook(InstructionStatus& status) {
   status.flags.stage = ExecStage::PreExec;
   if (m_hook) m_hook(status);
+  if (status.flags.skipExec) throw SkipInstruction();
 }
 
 uint8_t CPU6502::postExecHook(InstructionStatus& status, uint8_t cycles) {

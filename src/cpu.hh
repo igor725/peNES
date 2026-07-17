@@ -72,6 +72,7 @@ class CPU6502: public MMU {
     PreExec,  // Pre execution stage; mnemonic, addressing mode and operand are ready to read
     PostExec, // Instruction was successfuly executed and cycles counter was altered accordingly
     FailExec, // Instruction failed to execute, CPU panicked further execution is unsafe
+    SkipExec, // Instruction execution was skipped either by hook or by CPU itself (illegal instruction)
   };
 
   enum class AddrMode : uint8_t {
@@ -180,9 +181,10 @@ class CPU6502: public MMU {
     struct [[gnu::packed]] {
       Mnemonic  mnemonic : 8 = Mnemonic::UNK;
       AddrMode  addrMode : 4 = AddrMode::Implied;
-      ExecStage stage    : 2 = ExecStage::PreParse;
+      ExecStage stage    : 3 = ExecStage::PreParse;
       uint8_t   cycles   : 4 = 0;
       bool      isLegal  : 1 = false;
+      bool      skipExec : 1 = false;
     } flags = {};
 
     InstructionStatus& operator<<(Mnemonic mn) {
@@ -347,6 +349,8 @@ class CPU6502: public MMU {
   uint8_t step();
   void    triggerNMI();
   void    triggerIRQ();
+
+  Registers& exposeState() { return m_regs; }
 
   void setHook(CPUHook&& hook) { m_hook = std::move(hook); }
 

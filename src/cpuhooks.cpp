@@ -9,7 +9,7 @@ static uint64_t                     ReportThreshold = 0;
 
 void CPU6502::HeatMapHook(InstructionStatus& status) {
   switch (status.flags.stage) {
-    case ExecStage::PreExec: {
+    case ExecStage::PostExec: {
       auto& hmEnt = HeatMap[status.startAddr];
 
       hmEnt += 1;
@@ -38,6 +38,9 @@ void CPU6502::TesterHook(InstructionStatus& status) {
       if (tester != 2) abort();
       tester = 0;
     } break;
+    case CPU6502::ExecStage::SkipExec: {
+      std::cerr << "!SKIP " << status.buildMnemonic() << std::endl;
+    } break;
     case CPU6502::ExecStage::FailExec: {
       std::cerr << "!FAIL " << status.buildMnemonic() << std::endl;
       abort();
@@ -56,6 +59,7 @@ void CPU6502::VerboseTesterHook(InstructionStatus& status) {
       if (tester++ != 1) abort();
       std::cerr << status.buildMnemonic();
     } break;
+    case CPU6502::ExecStage::SkipExec:
     case CPU6502::ExecStage::PostExec: {
       if (tester != 2) abort();
       std::cerr << " @ " << (int)status.flags.cycles << std::endl;
