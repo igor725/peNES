@@ -7,6 +7,14 @@
 static std::map<uint16_t, uint64_t> HeatMap;
 static uint64_t                     ReportThreshold = 0;
 
+void CPU6502::UsedInstructionsHook(InstructionStatus& status) {
+  if (status.flags.stage != ExecStage::PreExec) return;
+  static std::map<CPU6502::Mnemonic, bool> Used;
+  if (Used.find(status.flags.mnemonic) != Used.end()) return;
+  Used[status.flags.mnemonic] = true;
+  std::cerr << status.buildMnemonic() << std::endl;
+}
+
 void CPU6502::HeatMapHook(InstructionStatus& status) {
   switch (status.flags.stage) {
     case ExecStage::PostExec: {

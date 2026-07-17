@@ -76,6 +76,7 @@ class CPU6502: public MMU {
   };
 
   enum class AddrMode : uint8_t {
+    Invalid,
     Accum,
     Absolute,
     AbsoluteX,
@@ -180,7 +181,7 @@ class CPU6502: public MMU {
 
     struct [[gnu::packed]] {
       Mnemonic  mnemonic : 8 = Mnemonic::UNK;
-      AddrMode  addrMode : 4 = AddrMode::Implied;
+      AddrMode  addrMode : 4 = AddrMode::Invalid;
       ExecStage stage    : 3 = ExecStage::PreParse;
       uint8_t   cycles   : 4 = 0;
       bool      isLegal  : 1 = false;
@@ -210,6 +211,8 @@ class CPU6502: public MMU {
 
         case AddrMode::Accum:
         case AddrMode::Implied: break;
+
+        case AddrMode::Invalid: throw;
       }
 
       owner.preExecHook(*this);
@@ -318,6 +321,7 @@ class CPU6502: public MMU {
       case AddrMode::IndexedXIndir: return _evalIndexedXIndir(status);
       case AddrMode::IndirIndexedY: return _evalIndirIndexedY(status);
       case AddrMode::Relative: throw;
+      case AddrMode::Invalid: throw;
       case AddrMode::ZeroPage: return {0, status.operand.u8};
       case AddrMode::ZeroPageX: return _evalZeroPageX(status);
       case AddrMode::ZeroPageY: return _evalZeroPageY(status);
@@ -343,6 +347,7 @@ class CPU6502: public MMU {
   static void VerboseTesterHook(InstructionStatus& status);
   static void TesterHook(InstructionStatus& status);
   static void HeatMapHook(InstructionStatus& status);
+  static void UsedInstructionsHook(InstructionStatus& status);
   static void SetHeatMapReportThreshold(uint64_t th);
 
   void    reset();
