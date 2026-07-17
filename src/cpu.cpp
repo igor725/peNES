@@ -1063,8 +1063,8 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
 
       status << Mnemonic::DEC;
       switch (status.getAddrMode()) {
-        case 0x00: /*  NOP impl (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::Implied;
+        case 0x00: /*  NOP imm (illegal) */ {
+          status << Mnemonic::NOP << AddrMode::Immediate;
           return postExecHook(status, 2);
         } break;
         case 0x01: /* DEC zp */ {
