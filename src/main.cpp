@@ -137,79 +137,83 @@ int main(int argc, char* argv[]) {
   if (cartridge->isVerticalMirror()) ppu.setVerticalMirroring();
   cpu.reset();
 
-  auto       lastTime = SDL_GetPerformanceCounter();
-  auto const perfFreq = static_cast<double>(SDL_GetPerformanceFrequency());
+  uint64_t     lastTime = SDL_GetPerformanceCounter();
+  double const perfFreq = static_cast<double>(SDL_GetPerformanceFrequency());
 
-  bool   stopped = false;
-  double lag     = 0.0;
+  bool    stopped     = false;
+  uint8_t ticks       = 0;
+  double  nextMeasure = 0.0, accumulator = 0.0;
   while (!stopped) {
-    uint64_t currentTime = SDL_GetPerformanceCounter();
-    lag += static_cast<double>(currentTime - lastTime) / perfFreq;
-    lastTime = currentTime;
+    uint64_t     currentTime = SDL_GetPerformanceCounter();
+    double const delta       = static_cast<double>(currentTime - lastTime) / perfFreq;
 
-    while (lag >= TARGET_FRAMETIME) {
+    if ((nextMeasure -= delta) <= 0.0) {
+      SDL_SetWindowTitle(window, std::format("peNES speed: {:0.2f}%", ((float)ticks * TARGET_FRAMETIME) * 100.0f).c_str());
+      nextMeasure = 1, ticks = 0;
+    }
+
+    if ((accumulator += delta) > TARGET_FRAMETIME) {
+      ticks += 1, accumulator -= TARGET_FRAMETIME;
       while (!ppu.isFrameReady()) {
         auto cycles = cpu.step();
         if (cycles >= 1) ppu.run(cycles * 3);
       }
+    }
 
-      SDL_Event ev;
-      while (SDL_PollEvent(&ev)) {
-        switch (ev.type) {
-          case SDL_EVENT_WINDOW_CLOSE_REQUESTED: {
-            stopped = true;
-          } break;
-          case SDL_EVENT_KEY_DOWN:
-            if (ev.key.scancode == SDL_SCANCODE_ESCAPE) cpu.reset();
-          case SDL_EVENT_KEY_UP: {
-            switch (ev.key.scancode) {
-              case SDL_SCANCODE_LEFT: padBtns[0].left = ev.type == SDL_EVENT_KEY_DOWN; break;
-              case SDL_SCANCODE_RIGHT: padBtns[0].right = ev.type == SDL_EVENT_KEY_DOWN; break;
-              case SDL_SCANCODE_UP: padBtns[0].up = ev.type == SDL_EVENT_KEY_DOWN; break;
-              case SDL_SCANCODE_DOWN: padBtns[0].down = ev.type == SDL_EVENT_KEY_DOWN; break;
-              case SDL_SCANCODE_X: padBtns[0].a = ev.type == SDL_EVENT_KEY_DOWN; break;
-              case SDL_SCANCODE_Z: padBtns[0].b = ev.type == SDL_EVENT_KEY_DOWN; break;
-              case SDL_SCANCODE_SPACE: padBtns[0].select = ev.type == SDL_EVENT_KEY_DOWN; break;
-              case SDL_SCANCODE_RETURN: padBtns[0].start = ev.type == SDL_EVENT_KEY_DOWN; break;
-              case SDL_SCANCODE_H: cpu.setHook(CPU6502::HeatMapHook); break;
-              case SDL_SCANCODE_T: cpu.setHook(CPU6502::TesterHook); break;
-              case SDL_SCANCODE_V: cpu.setHook(CPU6502::VerboseTesterHook); break;
-              case SDL_SCANCODE_R: cpu.setHook({}); break;
-              case SDL_SCANCODE_F1: CPU6502::SetHeatMapReportThreshold(1); break;
-              case SDL_SCANCODE_F2: CPU6502::SetHeatMapReportThreshold(10); break;
-              case SDL_SCANCODE_F3: CPU6502::SetHeatMapReportThreshold(100); break;
-              default: break;
-            }
-          } break;
-          case SDL_EVENT_GAMEPAD_ADDED: {
-            if (SDL_IsGamepad(ev.gdevice.which)) {
-              SDL_OpenGamepad(ev.gdevice.which);
-            }
-          } break;
-          case SDL_EVENT_GAMEPAD_REMOVED: {
-            if (auto pad = SDL_GetGamepadFromID(ev.gdevice.which)) {
-              SDL_CloseGamepad(pad);
-            }
-          } break;
-          case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
-            if (ev.gbutton.button == SDL_GAMEPAD_BUTTON_NORTH) cpu.reset();
-          } /* Intentional fallthrough */
-          case SDL_EVENT_GAMEPAD_BUTTON_UP: {
-            switch (ev.gbutton.button) {
-              case SDL_GAMEPAD_BUTTON_DPAD_LEFT: padBtns[0].left = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-              case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: padBtns[0].right = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-              case SDL_GAMEPAD_BUTTON_DPAD_UP: padBtns[0].up = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-              case SDL_GAMEPAD_BUTTON_DPAD_DOWN: padBtns[0].down = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-              case SDL_GAMEPAD_BUTTON_SOUTH: padBtns[0].a = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-              case SDL_GAMEPAD_BUTTON_EAST: padBtns[0].b = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-              case SDL_GAMEPAD_BUTTON_BACK: padBtns[0].select = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-              case SDL_GAMEPAD_BUTTON_START: padBtns[0].start = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            }
-          } break;
-        }
+    SDL_Event ev;
+    while (SDL_PollEvent(&ev)) {
+      switch (ev.type) {
+        case SDL_EVENT_WINDOW_CLOSE_REQUESTED: {
+          stopped = true;
+        } break;
+        case SDL_EVENT_KEY_DOWN:
+          if (ev.key.scancode == SDL_SCANCODE_ESCAPE) cpu.reset();
+        case SDL_EVENT_KEY_UP: {
+          switch (ev.key.scancode) {
+            case SDL_SCANCODE_LEFT: padBtns[0].left = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_RIGHT: padBtns[0].right = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_UP: padBtns[0].up = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_DOWN: padBtns[0].down = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_X: padBtns[0].a = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_Z: padBtns[0].b = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_SPACE: padBtns[0].select = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_RETURN: padBtns[0].start = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_H: cpu.setHook(CPU6502::HeatMapHook); break;
+            case SDL_SCANCODE_T: cpu.setHook(CPU6502::TesterHook); break;
+            case SDL_SCANCODE_V: cpu.setHook(CPU6502::VerboseTesterHook); break;
+            case SDL_SCANCODE_R: cpu.setHook({}); break;
+            case SDL_SCANCODE_F1: CPU6502::SetHeatMapReportThreshold(1); break;
+            case SDL_SCANCODE_F2: CPU6502::SetHeatMapReportThreshold(10); break;
+            case SDL_SCANCODE_F3: CPU6502::SetHeatMapReportThreshold(100); break;
+            default: break;
+          }
+        } break;
+        case SDL_EVENT_GAMEPAD_ADDED: {
+          if (SDL_IsGamepad(ev.gdevice.which)) {
+            SDL_OpenGamepad(ev.gdevice.which);
+          }
+        } break;
+        case SDL_EVENT_GAMEPAD_REMOVED: {
+          if (auto pad = SDL_GetGamepadFromID(ev.gdevice.which)) {
+            SDL_CloseGamepad(pad);
+          }
+        } break;
+        case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
+          if (ev.gbutton.button == SDL_GAMEPAD_BUTTON_NORTH) cpu.reset();
+        } /* Intentional fallthrough */
+        case SDL_EVENT_GAMEPAD_BUTTON_UP: {
+          switch (ev.gbutton.button) {
+            case SDL_GAMEPAD_BUTTON_DPAD_LEFT: padBtns[0].left = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: padBtns[0].right = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_DPAD_UP: padBtns[0].up = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_DPAD_DOWN: padBtns[0].down = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_SOUTH: padBtns[0].a = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_EAST: padBtns[0].b = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_BACK: padBtns[0].select = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_START: padBtns[0].start = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+          }
+        } break;
       }
-
-      lag -= TARGET_FRAMETIME;
     }
 
 #ifndef PENES_NO_SDL
@@ -219,6 +223,8 @@ int main(int argc, char* argv[]) {
     SDL_RenderTexture(rend, tex, nullptr, nullptr);
     SDL_RenderPresent(rend);
 #endif
+
+    lastTime = currentTime;
   }
 
 #ifndef PENES_NO_SDL
