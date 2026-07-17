@@ -70,7 +70,7 @@ uint8_t PPU::cpuRead(uint16_t addr) {
   uint8_t data = m_addrLatch;
 
   switch ((addr - 0x2000) % 8) {
-    case 0x01: data = m_oamAddr; break;
+    case 0x01 /*  PPU???? */: data = m_oamAddr; break;
     case 0x02 /* PPUSTATUS */: {
       data = m_regs.S;
       m_regs.S &= ~STATUS_VBLANK;
@@ -108,12 +108,11 @@ uint8_t PPU::cpuWrite(uint16_t addr, uint8_t value) {
       m_regs.C   = value;
       m_tramAddr = (m_tramAddr & 0xF3FF) | ((value & 0x03) << 10);
     } break;
-    case 0x01: /* PPUMASK */ {
-      m_regs.M = value;
-    } break;
+    case 0x01: /* PPUMASK */ m_regs.M = value; break;
+    case 0x02 /*  PPU???? */: break;
 
-    case 0x03: m_oamAddr = value; break;
-    case 0x04: m_oam[m_oamAddr++] = value; break;
+    case 0x03 /*  PPU???? */: m_oamAddr = value; break;
+    case 0x04 /*  PPU???? */: m_oam[m_oamAddr++] = value; break;
 
     case 0x05 /* PPUSCROLL */: {
       if (m_addrLatch == 0) {
@@ -138,7 +137,7 @@ uint8_t PPU::cpuWrite(uint16_t addr, uint8_t value) {
       m_addrLatch ^= 1;
     } break;
 
-    case 0x07: {
+    case 0x07 /*  PPU???? */: {
       writeInternal(m_vramAddr, value);
       m_vramAddr += (m_regs.C & 0x04) ? 32 : 1;
     } break;

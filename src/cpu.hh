@@ -22,6 +22,14 @@ class CPU6502: public MMU {
     uint8_t _raw;
   };
 
+  struct Registers {
+    uint8_t  A;    // Accumulator
+    Status   P;    // Processor status
+    uint16_t PC;   // Program counter
+    uint8_t  SP;   // Stack pointer
+    uint8_t  X, Y; // Indices
+  };
+
   enum class InstClass : uint8_t {
     Control,
     Math,
@@ -142,11 +150,29 @@ class CPU6502: public MMU {
 
     /* Illegal opcodes */
     UNK,
+    SLO,
+    RLA,
+    SRE,
+    RRA,
+    SAX,
+    LAX,
+    DCP,
+    ISC,
+    SHA,
+    SHS,
     SHY,
     SHX,
+    LAE,
+    ANC,
+    ASR,
+    ARR,
+    ANE,
+    LXA,
+    AXS,
   };
 
   struct [[gnu::packed]] InstructionStatus {
+    CPU6502&    owner;
     uint16_t    startAddr = 0;
     Instruction holder    = {};
     Operand     operand   = {};
@@ -161,35 +187,31 @@ class CPU6502: public MMU {
 
     InstructionStatus& operator<<(Mnemonic mn) {
       flags.mnemonic = mn, flags.isLegal = static_cast<uint32_t>(mn) < static_cast<uint32_t>(Mnemonic::UNK);
+      if (mn == Mnemonic::BRK) owner.readPC<uint8_t>(); // Special case, padding byte
       return *this;
     }
 
-    InstructionStatus& operator<<(AddrMode md) {
-      flags.addrMode = md;
-      return *this;
-    }
+    inline void operator<<(AddrMode md) {
+      switch (flags.addrMode = md) {
+        case AddrMode::Absolute:
+        case AddrMode::AbsoluteX:
+        case AddrMode::AbsoluteY:
+        case AddrMode::Indirect: operand.u16 = owner.readPC<uint16_t>(); break;
 
-    InstructionStatus& operator<<(uint8_t op) {
-      operand.u8 = op;
-      return *this;
-    }
+        case AddrMode::Immediate:
+        case AddrMode::IndexedXIndir:
+        case AddrMode::IndirIndexedY:
+        case AddrMode::Relative:
+        case AddrMode::ZeroPage:
+        case AddrMode::ZeroPageX:
+        case AddrMode::ZeroPageY: operand.u8 = owner.readPC<uint8_t>(); break;
 
-    InstructionStatus& operator<<(int8_t op) {
-      operand.s8 = op;
-      return *this;
-    }
+        case AddrMode::Accum:
+        case AddrMode::Implied: break;
+      }
 
-    InstructionStatus& operator<<(uint16_t op) {
-      operand.u16 = op;
-      return *this;
+      owner.preExecHook(*this);
     }
-
-    InstructionStatus& operator<<(int16_t op) {
-      operand.s16 = op;
-      return *this;
-    }
-
-    void operator<<(bool) { /* Dummy pre-exec result handler */ }
 
     inline InstClass getClass() const { return holder.deflt.instclass; }
 
@@ -208,7 +230,7 @@ class CPU6502: public MMU {
     std::string buildMnemonic(bool withAddr = false) const;
   };
 
-  static_assert(sizeof(InstructionStatus) == 8);
+  static_assert(sizeof(InstructionStatus) == 16);
 
   using CPUHook = std::function<void(InstructionStatus&)>;
 
@@ -243,6 +265,77 @@ class CPU6502: public MMU {
 
     p.B = software;
     pushStack<uint8_t>(p._raw);
+  }
+
+  static inline bool _isPageCrossed(uint16_t base, uint16_t target) { return (base & 0xFF00) != (target & 0xFF00); }
+
+  static inline bool _isPageCrossTaxed(InstructionStatus const& status) {
+    switch (status.flags.mnemonic) {
+      case Mnemonic::STA: return false;
+      case Mnemonic::ASL: return false;
+      default: return true;
+    }
+  }
+
+  inline std::pair<uint8_t, uint16_t> _evalIndexedXIndir(InstructionStatus const& status) {
+    return {3, (readRamByte(static_cast<uint8_t>((status.operand.u8 + m_regs.X) + 1)) << 8) | readRamByte(static_cast<uint8_t>(status.operand.u8 + m_regs.X))};
+  }
+
+  inline std::pair<uint8_t, uint16_t> _evalAbsolute(InstructionStatus const& status) { return {1, status.operand.u16}; }
+
+  inline std::pair<uint8_t, uint16_t> _evalAbsoluteX(InstructionStatus const& status) {
+    uint16_t const targetAddr = status.operand.u16 + m_regs.X;
+    return {_isPageCrossTaxed(status) && _isPageCrossed(status.operand.u16, targetAddr) ? 2 : 1, targetAddr};
+  }
+
+  inline std::pair<uint8_t, uint16_t> _evalAbsoluteY(InstructionStatus const& status) {
+    uint16_t const targetAddr = status.operand.u16 + m_regs.Y;
+    return {_isPageCrossTaxed(status) && _isPageCrossed(status.operand.u16, targetAddr) ? 2 : 1, targetAddr};
+  }
+
+  inline std::pair<uint8_t, uint16_t> _evalIndirIndexedY(InstructionStatus const& status) {
+    uint16_t const base   = (readRamByte((status.operand.u8 + 1) & 0xFF) << 8) | readRamByte(status.operand.u8);
+    uint16_t const target = base + m_regs.Y;
+    return {_isPageCrossTaxed(status) && _isPageCrossed(base, target) ? 3 : 2, target};
+  }
+
+  inline std::pair<uint8_t, uint16_t> _evalZeroPageX(InstructionStatus const& status) { return {1, static_cast<uint8_t>(status.operand.u8 + m_regs.X)}; }
+
+  inline std::pair<uint8_t, uint16_t> _evalZeroPageY(InstructionStatus const& status) { return {1, static_cast<uint8_t>(status.operand.u8 + m_regs.Y)}; }
+
+  std::pair<uint8_t, uint16_t> evaluateOperandToAddr(InstructionStatus const& status) {
+    if (status.flags.stage != ExecStage::PreExec) throw;
+    switch (status.flags.addrMode) {
+      case AddrMode::Accum: throw;
+      case AddrMode::Absolute: return _evalAbsolute(status);
+      case AddrMode::AbsoluteX: return _evalAbsoluteX(status);
+      case AddrMode::AbsoluteY: return _evalAbsoluteY(status);
+      case AddrMode::Immediate: return {0, status.operand.u8};
+      case AddrMode::Implied: throw; // Implied operand should not be evaluated
+      case AddrMode::Indirect: throw;
+      case AddrMode::IndexedXIndir: return _evalIndexedXIndir(status);
+      case AddrMode::IndirIndexedY: return _evalIndirIndexedY(status);
+      case AddrMode::Relative: throw;
+      case AddrMode::ZeroPage: return {0, status.operand.u8};
+      case AddrMode::ZeroPageX: return _evalZeroPageX(status);
+      case AddrMode::ZeroPageY: return _evalZeroPageY(status);
+    }
+  }
+
+  template <typename T>
+  std::tuple<uint8_t, uint16_t, T> evaluateOperandToValue(InstructionStatus const& status) {
+    switch (status.flags.addrMode) {
+      case AddrMode::Accum: return {0, 0, m_regs.A};
+      case AddrMode::Immediate: return {0, 0, static_cast<T>(status.operand.u8)};
+      case AddrMode::Indirect: {
+        uint16_t const high = (status.operand.u16 & 0xFF00) | static_cast<uint8_t>((status.operand.u16 & 0xFF) + 1);
+        return {4, status.operand.u16, (readRamByte(high) << 8) | readRamByte(status.operand.u16)};
+      } break;
+      default: break;
+    }
+
+    auto const [cycles, addr] = evaluateOperandToAddr(status);
+    return {cycles + sizeof(T), addr, readRam<T>(addr)};
   }
 
   static void VerboseTesterHook(InstructionStatus& status);
@@ -283,18 +376,12 @@ class CPU6502: public MMU {
   uint8_t handleUnknown(InstructionStatus& status);
   uint8_t writeRamByte(uint16_t addr, uint8_t value);
   uint8_t readRamByte(uint16_t addr) const;
-  bool    preExecHook(InstructionStatus& status);
+  void    preExecHook(InstructionStatus& status);
   uint8_t postExecHook(InstructionStatus& status, uint8_t cycles);
   uint8_t interrupt(uint16_t vector, bool software = false);
 
   private:
-  struct {
-    uint8_t  A;    // Accumulator
-    Status   P;    // Processor status
-    uint16_t PC;   // Program counter
-    uint8_t  SP;   // Stack pointer
-    uint8_t  X, Y; // Indices
-  } m_regs;
+  Registers m_regs;
 
   struct {
     bool m_nmiTriggered : 1;
