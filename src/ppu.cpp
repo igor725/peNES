@@ -66,16 +66,16 @@ void PPU::writeInternal(uint16_t addr, uint8_t value) {
   }
 }
 
-uint8_t PPU::cpuRead(uint16_t addr) {
-  uint8_t data = m_addrLatch;
+std::optional<uint8_t> PPU::cpuRead(uint16_t addr) {
+  uint8_t data;
 
   switch ((addr - 0x2000) % 8) {
-    case 0x01 /*  PPU???? */: data = m_oamAddr; break;
     case 0x02 /* PPUSTATUS */: {
       data = m_regs.S;
       m_regs.S &= ~STATUS_VBLANK;
       m_addrLatch = 0;
     } break;
+    case 0x04 /* OAMDATA */: data = m_oam[m_oamAddr]; break;
     case 0x07 /* PPUDATA */: {
       data         = m_readBuffer;
       m_readBuffer = readInternal(m_vramAddr);
@@ -87,6 +87,8 @@ uint8_t PPU::cpuRead(uint16_t addr) {
 
       m_vramAddr += (m_regs.C & CTRL_VRAM_INCREMENT) ? 32 : 1;
     } break;
+
+    default: return {};
   }
 
   return data;
@@ -102,17 +104,21 @@ uint8_t PPU::dmaWrite(uint8_t value) {
   return 0;
 }
 
-uint8_t PPU::cpuWrite(uint16_t addr, uint8_t value) {
+std::optional<uint8_t> PPU::cpuWrite(uint16_t addr, uint8_t value) {
   switch ((addr - 0x2000) % 8) {
     case 0x00: /* PPUCTRL */ {
+      if (m_regs.S & STATUS_VBLANK) /* CTRL happend inside VBLANK */ {
+        if ((m_regs.C & CTRL_GEN_NMI) == 0 && (value & CTRL_GEN_NMI) > 0) {
+          m_cpu.triggerNMI();
+        }
+      }
       m_regs.C   = value;
       m_tramAddr = (m_tramAddr & 0xF3FF) | ((value & 0x03) << 10);
     } break;
     case 0x01: /* PPUMASK */ m_regs.M = value; break;
-    case 0x02 /*  PPU???? */: break;
 
-    case 0x03 /*  PPU???? */: m_oamAddr = value; break;
-    case 0x04 /*  PPU???? */: m_oam[m_oamAddr++] = value; break;
+    case 0x03 /*  OAMADDR */: m_oamAddr = value; break;
+    case 0x04 /*  PPUDATA */: m_oam[m_oamAddr++] = value; break;
 
     case 0x05 /* PPUSCROLL */: {
       if (m_addrLatch == 0) {
@@ -137,13 +143,13 @@ uint8_t PPU::cpuWrite(uint16_t addr, uint8_t value) {
       m_addrLatch ^= 1;
     } break;
 
-    case 0x07 /*  PPU???? */: {
+    case 0x07 /*  PPUDATA */: {
       writeInternal(m_vramAddr, value);
       m_vramAddr += (m_regs.C & 0x04) ? 32 : 1;
     } break;
   }
 
-  return value;
+  return {};
 }
 
 void PPU::step() {
@@ -190,16 +196,13 @@ void PPU::step() {
                 sprAddr |= (sy & 7);
 
                 if (uint16_t spriteColor = (readInternal(sprAddr + 8) >> sx << 1 & 2) | (readInternal(sprAddr) >> sx & 1)) {
+                  if (i == 0 && bgColor != 0 && m_cycle < 255) m_regs.S |= STATUS_SPRITE_ZERO_HIT;
+                  if (++m_spritesPerScan >= 9) m_regs.S |= STATUS_SPRITE_OVERFLOW;
                   if (!(m_cycle < 8 && !(m_regs.M & MASK_SPRITE_LC_CLIP))) {
-                    if (i == 0 && bgColor != 0 && m_cycle < 255) {
-                      m_regs.S |= STATUS_SPRITE_ZERO_HIT;
-                    }
-
                     if (!((spriteAttribs & SPRITE_PRIO) && bgColor != 0)) {
                       renderColor = spriteColor;
                       palette     = 0x10 | ((spriteAttribs & SPRITE_PALETTE) * 4);
                     }
-
                     break;
                   }
                 }
@@ -269,7 +272,7 @@ void PPU::step() {
   }
 
   if (++m_cycle == 341) {
-    m_cycle = 0;
+    m_cycle = 0, m_spritesPerScan = 0;
     if (++m_scanline > 261) m_scanline = 0;
   }
 }

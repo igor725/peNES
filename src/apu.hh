@@ -107,6 +107,8 @@ class APU {
 
   bool handleWrite(uint16_t addr, uint8_t value);
 
+  void setEnabled(bool state) { m_outEnabled = state; }
+
   void step(uint8_t cycles);
 
   void onData(APUHandler&& handler) { m_handler = std::move(handler); }
@@ -120,6 +122,7 @@ class APU {
   bool     m_5stepSequence = false;
   bool     m_irqInhibit    = false;
   bool     m_frameIrq      = false;
+  bool     m_outEnabled    = true;
   uint8_t  m_step          = 0;
   uint16_t m_cycles        = 0;
 

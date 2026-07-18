@@ -56,16 +56,19 @@ struct Console {
     };
 
     if ((stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr)) != nullptr) {
+      SDL_SetAudioStreamGain(stream, 0.3f);
       SDL_ResumeAudioStreamDevice(stream);
     }
 #endif
   }
 
+  virtual ~Console() = default;
+
   void put(std::filesystem::path const& nesFile) {
     cartridge.insert(nesFile);
 
     // PPU handler
-    cpu.addRangeHandler({0x2000, 0x3FFF}, [&](bool isWrite, uint16_t addr, uint8_t value) -> uint8_t {
+    cpu.addRangeHandler({0x2000, 0x3FFF}, [&](bool isWrite, uint16_t addr, uint8_t value) -> std::optional<uint8_t> {
       if (isWrite) return ppu.cpuWrite(addr, value);
       return ppu.cpuRead(addr);
     });

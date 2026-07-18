@@ -16,6 +16,7 @@ class CartridgeException: public std::exception {
   enum class Type {
     ValidateFail,
     UnsupportedMapper,
+    PALDump,
   };
 
   CartridgeException(int32_t errorCode);

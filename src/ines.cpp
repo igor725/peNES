@@ -17,6 +17,7 @@ CartridgeException::CartridgeException(Type type, int32_t additionalData) {
   switch (type) {
     case Type::ValidateFail: m_what = "Failed to validate cartridge dump"; break;
     case Type::UnsupportedMapper: m_what = "Unsupported mapper: " + std::to_string(additionalData); break;
+    case Type::PALDump: m_what = "PAL cartridges are unsupported atm"; break;
   }
 }
 
@@ -61,6 +62,8 @@ void iNES::insert(std::filesystem::path const& path) {
 
     default: throw CartridgeException(CartridgeException::Type::UnsupportedMapper, m);
   }
+
+  if (!m_file->isNTSC()) throw CartridgeException(CartridgeException::Type::PALDump);
 }
 
 iNES::~iNES() {

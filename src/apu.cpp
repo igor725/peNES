@@ -269,32 +269,43 @@ void APU::step(uint8_t cycles) {
     m_dmc.step();
 
     if ((m_cycles++ % (CPU6502::BASE_CLOCK_FREQUENCY / BASE_FCNT_FREQUENCY)) == 0) {
-      auto const clockStep = m_step++ % (m_5stepSequence ? 5 : 4);
-      if (clockStep < 5) {
+      const auto envelope = [&]() {
         m_triangle.clock();
         for (uint8_t i = 0; i < 2; ++i) {
           m_pulse[i].clockEnvelope();
         }
-
-        if (clockStep % 1 == 0) {
-          m_triangle.advanceLength(), m_noise.advanceLength();
-          for (uint8_t i = 0; i < 2; ++i) {
-            m_pulse[i].clock();
-          }
+      };
+      const auto length = [&]() {
+        m_triangle.advanceLength(), m_noise.advanceLength();
+        for (uint8_t i = 0; i < 2; ++i) {
+          m_pulse[i].clock();
         }
-      } else {
+      };
+      const auto irq = [&]() {
+        if (m_irqInhibit) return;
         m_frameIrq = true;
         m_cpu.triggerIRQ();
+      };
+      const auto special = [&]() {
+        if (m_5stepSequence) return;
+        irq(), length(), envelope();
+      };
+      switch (m_step++ % (m_5stepSequence ? 5 : 4)) {
+        case 0: envelope(); break;
+        case 1: length(), envelope(); break;
+        case 2: envelope(); break;
+        case 3: special(); break;
+        case 4: length(), envelope(); break;
       }
     }
 
-    if (m_handler) {
+    if (m_outEnabled && m_handler) {
       auto const currSample = mixChannels();
 
       m_sampleAccumulator += currSample;
       m_sampleCount += 1;
       if ((m_cycleAccumulator += 1.0) >= CYCLES_PER_SAMPLE) {
-        m_handler((m_sampleAccumulator / m_sampleCount) * 0.3f);
+        m_handler(m_sampleAccumulator / m_sampleCount);
         m_sampleAccumulator = 0.0f;
         m_sampleCount       = 0;
         m_cycleAccumulator -= CYCLES_PER_SAMPLE;

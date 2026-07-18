@@ -12,9 +12,9 @@ class PPU: public MMU {
   PPU(CPU6502& c);
   ~PPU();
 
-  uint8_t cpuRead(uint16_t addr);
-  uint8_t cpuWrite(uint16_t addr, uint8_t value);
-  uint8_t dmaWrite(uint8_t value);
+  std::optional<uint8_t> cpuRead(uint16_t addr);
+  std::optional<uint8_t> cpuWrite(uint16_t addr, uint8_t value);
+  uint8_t                dmaWrite(uint8_t value);
 
   void                      run(uint8_t cycles);
   std::span<uint32_t const> getFrame();
@@ -41,7 +41,7 @@ class PPU: public MMU {
   static constexpr uint8_t CTRL_MASTER_SELECT     = 0x40;
   static constexpr uint8_t CTRL_GEN_NMI           = 0x80;
   static constexpr uint8_t STATUS_OPEN_BUS        = 0x0F;
-  static constexpr uint8_t STATUS_SPRITE_OVERFLOW = 0x10;
+  static constexpr uint8_t STATUS_SPRITE_OVERFLOW = 0x20;
   static constexpr uint8_t STATUS_SPRITE_ZERO_HIT = 0x40;
   static constexpr uint8_t STATUS_VBLANK          = 0x80;
   static constexpr uint8_t MASK_GREYSCALE         = 0x01;
@@ -67,21 +67,22 @@ class PPU: public MMU {
     uint8_t S = 0;
   } m_regs;
 
-  uint16_t m_shiftHigh  = 0;
-  uint16_t m_shiftLow   = 0;
-  uint16_t m_tramAddr   = 0;
-  uint16_t m_vramAddr   = 0;
-  uint16_t m_cycle      = 0;
-  uint16_t m_scanline   = 0;
-  uint16_t m_bgAttr     = 0;
-  uint8_t  m_fineX      = 0;
-  uint8_t  m_oamAddr    = 0;
-  uint8_t  m_addrLatch  = 0;
-  uint8_t  m_readBuffer = 0;
-  uint8_t  m_bgTile     = 0;
-  uint8_t  m_bgLow      = 0;
-  uint8_t  m_bgHigh     = 0;
-  uint32_t m_shiftAt    = 0;
+  uint16_t m_shiftHigh      = 0;
+  uint16_t m_shiftLow       = 0;
+  uint16_t m_tramAddr       = 0;
+  uint16_t m_vramAddr       = 0;
+  uint16_t m_cycle          = 0;
+  uint16_t m_scanline       = 0;
+  uint16_t m_bgAttr         = 0;
+  uint8_t  m_fineX          = 0;
+  uint8_t  m_oamAddr        = 0;
+  uint8_t  m_addrLatch      = 0;
+  uint8_t  m_readBuffer     = 0;
+  uint8_t  m_bgTile         = 0;
+  uint8_t  m_bgLow          = 0;
+  uint8_t  m_bgHigh         = 0;
+  uint8_t  m_spritesPerScan = 0;
+  uint32_t m_shiftAt        = 0;
 
   bool m_frameReady       = false;
   bool m_mirrorVertically = false;

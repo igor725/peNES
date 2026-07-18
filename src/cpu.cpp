@@ -1213,17 +1213,18 @@ uint8_t CPU6502::handleUnknown(InstructionStatus& status) { /* All instructions 
 }
 
 uint8_t CPU6502::step() {
+  if (m_nmiTriggered) {
+    m_nmiTriggered = false;
+    interrupt(0xFFFA, false);
+    return 0;
+  }
   if (m_intrClrSchd) {
     m_intrClrSchd = false;
     m_regs.P.I    = 0;
-  }
-
-  if (m_nmiTriggered) {
-    m_nmiTriggered = false;
-    return interrupt(0xFFFA, false);
   } else if (m_regs.P.I == 0 && m_irqTriggered) {
     m_irqTriggered = false;
-    return interrupt(0xFFFE, false);
+    interrupt(0xFFFE, false);
+    return 0;
   }
 
   InstructionStatus s {
