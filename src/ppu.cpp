@@ -23,7 +23,7 @@ uint16_t PPU::getNametableMirroringOffset(uint16_t addr) {
 uint8_t PPU::readInternal(uint16_t addr) {
   addr &= 0x3FFF;
   if (auto it = findHandler(addr); isValidHandler(it)) {
-    return it->second(false, addr, 0);
+    if (auto ret = it->second(false, addr, 0); ret.has_value()) return ret.value();
   }
 
   if (addr >= 0x2000 && addr <= 0x3EFF) {

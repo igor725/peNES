@@ -239,6 +239,8 @@ class CPU6502: public MMU {
 
   using CPUHook = std::function<void(InstructionStatus&)>;
 
+  static constexpr uint32_t BASE_CLOCK_FREQUENCY = 1789773;
+
   CPU6502();
   ~CPU6502();
 

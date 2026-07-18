@@ -2,7 +2,6 @@
 
 #include "mappers/mapper.hh"
 
-#include <SDL3/SDL_stdinc.h>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -21,7 +20,7 @@ class CartridgeException: public std::exception {
 
   CartridgeException(int32_t errorCode);
 
-  CartridgeException(Type type);
+  CartridgeException(Type type, int32_t additionalData = 0);
 
   const char* what() const noexcept override { return m_what.c_str(); }
 };

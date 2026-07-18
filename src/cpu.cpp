@@ -1269,10 +1269,10 @@ uint8_t CPU6502::writeRamByte(uint16_t addr, uint8_t value) {
 
   m_bus = value;
   if (auto handler = findHandler(addr); isValidHandler(handler)) {
-    return handler->second(true, addr, value);
+    if (auto ret = handler->second(true, addr, value); ret.has_value()) return ret.value();
   }
 
-  return m_bus = value;
+  return value;
 }
 
 uint8_t CPU6502::readRamByte(uint16_t addr) const {
@@ -1282,7 +1282,7 @@ uint8_t CPU6502::readRamByte(uint16_t addr) const {
   }
 
   if (auto handler = findHandler(addr); isValidHandler(handler)) {
-    return handler->second(false, addr, 0);
+    if (auto ret = handler->second(false, addr, 0); ret.has_value()) return ret.value();
   }
 
   return m_bus;

@@ -3,7 +3,11 @@
 #include "ines.hh"
 #include "ppu.hh"
 
-#include <SDL3/SDL.h>
+#include <SDL3/SDL_audio.h>
+#include <SDL3/SDL_events.h>
+#include <SDL3/SDL_init.h>
+#include <SDL3/SDL_render.h>
+#include <SDL3/SDL_timer.h>
 #include <cassert>
 #include <cstdint>
 #include <filesystem>
@@ -43,7 +47,21 @@ struct Console {
 
   PadState padBtns[2], padShift[2];
 
-  Console(): ppu(cpu), apu(cpu) {}
+  SDL_AudioStream* stream;
+
+  Console(): ppu(cpu), apu(cpu) {
+#ifndef PENES_NO_SDL
+    SDL_AudioSpec spec = {
+        .format   = SDL_AUDIO_F32LE,
+        .channels = 1,
+        .freq     = 48000,
+    };
+
+    if ((stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr)) != nullptr) {
+      SDL_ResumeAudioStreamDevice(stream);
+    }
+#endif
+  }
 
   void put(std::filesystem::path const& nesFile) {
     cartridge.insert(nesFile);
@@ -55,7 +73,7 @@ struct Console {
     });
 
     // PPU, APU, I/O handler
-    cpu.addRangeHandler({0x4000, 0x4017}, [&, latch = false](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
+    cpu.addRangeHandler({0x4000, 0x4017}, [&, latch = false](bool isWrite, uint16_t addr, uint8_t value) mutable -> std::optional<uint8_t> {
       if (isWrite) {
         if (apu.handleWrite(addr, value)) {
           return 0;
@@ -81,7 +99,7 @@ struct Console {
         return padShift[pNum].shift();
       }
 
-      throw;
+      return {};
     });
 
     // SRAM, PRG-RAM, PRG-ROM handler
@@ -104,6 +122,11 @@ struct Console {
       return cartridge->data[*romAddr];
     });
 
+#ifndef PENES_NO_SDL
+    // Audio data pusher
+    apu.onData([&](float sample) { SDL_PutAudioStreamData(stream, &sample, 4); });
+#endif
+
     if (cartridge->isVerticalMirror()) ppu.setVerticalMirroring();
     cpu.reset();
   }
@@ -111,14 +134,17 @@ struct Console {
   void step() {
     while (!ppu.isFrameReady()) {
       auto cycles = cpu.step();
-      if (cycles >= 1) ppu.run(cycles * 3);
+      if (cycles >= 1) {
+        ppu.run(cycles * 3);
+        apu.step(cycles);
+      }
     }
   }
 };
 
 int main(int argc, char* argv[]) {
 #ifndef PENES_NO_SDL
-  if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
+  if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_AUDIO)) {
     std::cerr << "Failed to initialize SDL: " << SDL_GetError() << std::endl;
     return 1;
   }

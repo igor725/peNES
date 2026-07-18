@@ -4,6 +4,7 @@
 
 #include <cstring>
 #include <fcntl.h>
+#include <string>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -12,10 +13,10 @@ CartridgeException::CartridgeException(int32_t errorCode) {
   m_what = ::strerror(errorCode);
 }
 
-CartridgeException::CartridgeException(Type type) {
+CartridgeException::CartridgeException(Type type, int32_t additionalData) {
   switch (type) {
     case Type::ValidateFail: m_what = "Failed to validate cartridge dump"; break;
-    case Type::UnsupportedMapper: m_what = "Unsupported mapper"; break;
+    case Type::UnsupportedMapper: m_what = "Unsupported mapper: " + std::to_string(additionalData); break;
   }
 }
 
@@ -51,14 +52,14 @@ void iNES::insert(std::filesystem::path const& path) {
   m_size = sb.st_size;
   ::close(file);
 
-  switch (m_file->getMapperId()) {
+  switch (auto m = m_file->getMapperId()) {
     case 0x00: m_mapper = createMMC0(this); break;
 
     case 0x01:
     case 0x69:
     case 0x9b: m_mapper = createMMC1(this); break;
 
-    default: throw CartridgeException(CartridgeException::Type::UnsupportedMapper);
+    default: throw CartridgeException(CartridgeException::Type::UnsupportedMapper, m);
   }
 }
 
