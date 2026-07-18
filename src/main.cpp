@@ -13,8 +13,6 @@
 #include <filesystem>
 #include <iostream>
 
-constexpr double TARGET_FRAMETIME = 1.0 / 60.0988;
-
 struct Console {
   union PadState {
     struct {
@@ -181,6 +179,9 @@ int main(int argc, char* argv[]) {
     return 6;
   }
 
+#ifndef PENES_NO_SDL
+  constexpr double TARGET_FRAMETIME = 1.0 / 60.0988;
+
   uint64_t     lastTime = SDL_GetPerformanceCounter();
   double const perfFreq = static_cast<double>(SDL_GetPerformanceFrequency());
 
@@ -257,22 +258,22 @@ int main(int argc, char* argv[]) {
       }
     }
 
-#ifndef PENES_NO_SDL
     auto frame = nes.ppu.getFrame();
     SDL_UpdateTexture(tex, nullptr, frame.data(), 256 * 4);
     SDL_RenderClear(rend);
     SDL_RenderTexture(rend, tex, nullptr, nullptr);
     SDL_RenderPresent(rend);
-#endif
 
     lastTime = currentTime;
   }
 
-#ifndef PENES_NO_SDL
   SDL_DestroyTexture(tex);
   SDL_DestroyRenderer(rend);
   SDL_DestroyWindow(window);
   SDL_Quit();
+#else
+  while (true)
+    nes.step();
 #endif
 
   return 0;
