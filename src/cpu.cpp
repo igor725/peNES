@@ -134,14 +134,16 @@ void CPU6502::reset() {
   m_nmiTriggered = false;
   m_irqTriggered = false;
   m_intrClrSchd  = false;
-  m_regs.P.C     = 1;
-  m_regs.P.I     = 1;
+  m_regs.SP      = 0xFF;
+  m_regs.PC      = 0x00;
+  m_regs.P.C     = 0;
+  m_regs.P.Z     = 0;
   m_regs.P.D     = 0;
+  m_regs.P.V     = 0;
   m_regs.A       = 0;
   m_regs.X       = 0;
   m_regs.Y       = 0;
-  m_regs.SP      = 0xFF;
-  m_regs.PC      = readRam<uint16_t>(0xFFFC);
+  interrupt(0xFFFC);
 }
 
 uint8_t CPU6502::interrupt(uint16_t vector, bool software) {
@@ -1260,19 +1262,30 @@ void CPU6502::triggerIRQ() {
 }
 
 uint8_t CPU6502::writeRamByte(uint16_t addr, uint8_t value) {
-  if (addr <= 0x1FFF) addr &= 0x7ff;
+  if (addr <= 0x1FFF) {
+    addr &= 0x7ff;
+    return m_ram.at(addr) = value;
+  }
+
+  m_bus = value;
   if (auto handler = findHandler(addr); isValidHandler(handler)) {
     return handler->second(true, addr, value);
   }
-  return m_ram.at(addr) = value;
+
+  return m_bus = value;
 }
 
 uint8_t CPU6502::readRamByte(uint16_t addr) const {
-  if (addr <= 0x1FFF) addr &= 0x7ff;
+  if (addr <= 0x1FFF) {
+    addr &= 0x7ff;
+    return m_ram.at(addr);
+  }
+
   if (auto handler = findHandler(addr); isValidHandler(handler)) {
     return handler->second(false, addr, 0);
   }
-  return m_ram.at(addr);
+
+  return m_bus;
 }
 
 void CPU6502::preExecHook(InstructionStatus& status) {

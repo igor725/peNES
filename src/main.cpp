@@ -6,9 +6,115 @@
 #include <SDL3/SDL.h>
 #include <cassert>
 #include <cstdint>
+#include <filesystem>
 #include <iostream>
 
 constexpr double TARGET_FRAMETIME = 1.0 / 60.0988;
+
+struct Console {
+  union PadState {
+    struct {
+      uint8_t a      : 1;
+      uint8_t b      : 1;
+      uint8_t select : 1;
+      uint8_t start  : 1;
+      uint8_t up     : 1;
+      uint8_t down   : 1;
+      uint8_t left   : 1;
+      uint8_t right  : 1;
+    };
+
+    uint8_t _raw = 0;
+
+    uint8_t getFirstBtnState() const { return a; }
+
+    uint8_t shift() {
+      uint8_t ret = _raw & 0x01;
+      _raw >>= 1;
+      _raw |= 0x80;
+      return ret;
+    }
+  };
+
+  CPU6502 cpu;
+  PPU     ppu;
+  APU     apu;
+  iNES    cartridge;
+
+  PadState padBtns[2], padShift[2];
+
+  Console(): ppu(cpu), apu(cpu) {}
+
+  void put(std::filesystem::path const& nesFile) {
+    cartridge.insert(nesFile);
+
+    // PPU handler
+    cpu.addRangeHandler({0x2000, 0x3FFF}, [&](bool isWrite, uint16_t addr, uint8_t value) -> uint8_t {
+      if (isWrite) return ppu.cpuWrite(addr, value);
+      return ppu.cpuRead(addr);
+    });
+
+    // PPU, APU, I/O handler
+    cpu.addRangeHandler({0x4000, 0x4017}, [&, latch = false](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
+      if (isWrite) {
+        if (apu.handleWrite(addr, value)) {
+          return 0;
+        } else if (addr == 0x4014) {
+          return ppu.dmaWrite(value);
+        } else if (addr == 0x4016) {
+          if ((latch = (value & 0x01)) == 0x01) {
+            padShift[0] = padBtns[0];
+            padShift[1] = padBtns[1];
+          }
+
+          return 0;
+        }
+
+        throw;
+      }
+
+      if (auto res = apu.handleRead(addr); res.has_value()) {
+        return res.value();
+      } else if (addr >= 0x4016 && addr <= 0x4017) { // Read gamepad
+        auto const pNum = addr == 0x4016 ? 0 : 1;
+        if (latch) return padBtns[pNum].getFirstBtnState();
+        return padShift[pNum].shift();
+      }
+
+      throw;
+    });
+
+    // SRAM, PRG-RAM, PRG-ROM handler
+    cpu.addRangeHandler(cartridge.getMapper()->getMappedRegion(), [&](bool isWrite, uint16_t addr, uint8_t value) -> uint8_t {
+      // Let mapper handle this stuff
+      return cartridge.getMapper()->cpuOperation(isWrite, addr, value);
+    });
+
+    // PPU CHR handler
+    ppu.addRangeHandler({0x0000, 0x1FFF}, [&](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
+      auto const romAddr = cartridge.getMapper()->resolvePPU(addr);
+      if (!romAddr.has_value()) /* No CHR data in cartridge */ {
+        auto const chrRam = ppu.prepareCHRMemory();
+        if (isWrite) return chrRam[addr] = value;
+        return chrRam[addr];
+      }
+
+      // Skip all writes
+      if (!cartridge.checkBounds(*romAddr)) throw;
+      return cartridge->data[*romAddr];
+    });
+
+    if (cartridge->isVerticalMirror()) ppu.setVerticalMirroring();
+    cpu.reset();
+  }
+
+  void step() {
+    while (!ppu.isFrameReady()) {
+      auto cycles = cpu.step();
+      if (cycles >= 1) ppu.run(cycles * 3);
+    }
+  }
+};
 
 int main(int argc, char* argv[]) {
 #ifndef PENES_NO_SDL
@@ -40,102 +146,14 @@ int main(int argc, char* argv[]) {
     return 5;
   }
 
-  iNES cartridge;
+  Console nes;
+
   try {
-    cartridge.insert(argv[1]);
+    nes.put(argv[1]);
   } catch (CartridgeException const& ex) {
     std::cerr << "Failed to load specified cartridge file: " << ex.what() << std::endl;
     return 6;
   }
-
-  CPU6502 cpu;
-  PPU     ppu(cpu);
-  APU     apu(cpu);
-
-  union PadState {
-    struct {
-      uint8_t a      : 1;
-      uint8_t b      : 1;
-      uint8_t select : 1;
-      uint8_t start  : 1;
-      uint8_t up     : 1;
-      uint8_t down   : 1;
-      uint8_t left   : 1;
-      uint8_t right  : 1;
-    };
-
-    uint8_t _raw = 0;
-
-    uint8_t getFirstBtnState() const { return a; }
-
-    uint8_t shift() {
-      uint8_t ret = _raw & 0x01;
-      _raw >>= 1;
-      _raw |= 0x80;
-      return ret;
-    }
-  };
-
-  PadState padBtns[2], padShift[2];
-
-  // PPU handler
-  cpu.addRangeHandler({0x2000, 0x3FFF}, [&](bool isWrite, uint16_t addr, uint8_t value) -> uint8_t {
-    if (isWrite) return ppu.cpuWrite(addr, value);
-    return ppu.cpuRead(addr);
-  });
-
-  // PPU, APU, I/O handler
-  cpu.addRangeHandler({0x4000, 0x4017}, [&, latch = false](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
-    if (isWrite) {
-      if (apu.handleWrite(addr, value)) {
-        return 0;
-      } else if (addr == 0x4014) {
-        return ppu.dmaWrite(value);
-      } else if (addr == 0x4016) {
-        if ((latch = (value & 0x01)) == 0x01) {
-          padShift[0] = padBtns[0];
-          padShift[1] = padBtns[1];
-        }
-
-        return 0;
-      }
-
-      throw;
-    }
-
-    if (auto res = apu.handleRead(addr); res.has_value()) {
-      return res.value();
-    } else if (addr >= 0x4016 && addr <= 0x4017) { // Read gamepad
-      auto const pNum = addr == 0x4016 ? 0 : 1;
-      if (latch) return padBtns[pNum].getFirstBtnState();
-      return padShift[pNum].shift();
-    }
-
-    throw;
-  });
-
-  // PRG-ROM handler
-  cpu.addRangeHandler({0x8000, 0xFFFF}, [&](bool isWrite, uint16_t addr, uint8_t value) -> uint8_t {
-    // Let mapper handle this stuff
-    return cartridge.getMapper()->cpuOperation(isWrite, addr, value);
-  });
-
-  // PPU CHR handler
-  ppu.addRangeHandler({0x0000, 0x1FFF}, [&](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
-    auto const romAddr = cartridge.getMapper()->resolvePPU(addr);
-    if (!romAddr.has_value()) /* No CHR data in cartridge */ {
-      auto const chrRam = ppu.prepareCHRMemory();
-      if (isWrite) return chrRam[addr] = value;
-      return chrRam[addr];
-    }
-
-    // Skip all writes
-    if (!cartridge.checkBounds(*romAddr)) throw;
-    return cartridge->data[*romAddr];
-  });
-
-  if (cartridge->isVerticalMirror()) ppu.setVerticalMirroring();
-  cpu.reset();
 
   uint64_t     lastTime = SDL_GetPerformanceCounter();
   double const perfFreq = static_cast<double>(SDL_GetPerformanceFrequency());
@@ -154,10 +172,7 @@ int main(int argc, char* argv[]) {
 
     if ((accumulator += delta) > TARGET_FRAMETIME) {
       ticks += 1, accumulator -= TARGET_FRAMETIME;
-      while (!ppu.isFrameReady()) {
-        auto cycles = cpu.step();
-        if (cycles >= 1) ppu.run(cycles * 3);
-      }
+      nes.step();
     }
 
     SDL_Event ev;
@@ -167,21 +182,21 @@ int main(int argc, char* argv[]) {
           stopped = true;
         } break;
         case SDL_EVENT_KEY_DOWN:
-          if (ev.key.scancode == SDL_SCANCODE_ESCAPE) cpu.reset();
+          if (ev.key.scancode == SDL_SCANCODE_ESCAPE) nes.cpu.reset();
         case SDL_EVENT_KEY_UP: {
           switch (ev.key.scancode) {
-            case SDL_SCANCODE_LEFT: padBtns[0].left = ev.type == SDL_EVENT_KEY_DOWN; break;
-            case SDL_SCANCODE_RIGHT: padBtns[0].right = ev.type == SDL_EVENT_KEY_DOWN; break;
-            case SDL_SCANCODE_UP: padBtns[0].up = ev.type == SDL_EVENT_KEY_DOWN; break;
-            case SDL_SCANCODE_DOWN: padBtns[0].down = ev.type == SDL_EVENT_KEY_DOWN; break;
-            case SDL_SCANCODE_X: padBtns[0].a = ev.type == SDL_EVENT_KEY_DOWN; break;
-            case SDL_SCANCODE_Z: padBtns[0].b = ev.type == SDL_EVENT_KEY_DOWN; break;
-            case SDL_SCANCODE_SPACE: padBtns[0].select = ev.type == SDL_EVENT_KEY_DOWN; break;
-            case SDL_SCANCODE_RETURN: padBtns[0].start = ev.type == SDL_EVENT_KEY_DOWN; break;
-            case SDL_SCANCODE_H: cpu.setHook(CPU6502::HeatMapHook); break;
-            case SDL_SCANCODE_T: cpu.setHook(CPU6502::TesterHook); break;
-            case SDL_SCANCODE_V: cpu.setHook(CPU6502::VerboseTesterHook); break;
-            case SDL_SCANCODE_R: cpu.setHook({}); break;
+            case SDL_SCANCODE_LEFT: nes.padBtns[0].left = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_RIGHT: nes.padBtns[0].right = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_UP: nes.padBtns[0].up = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_DOWN: nes.padBtns[0].down = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_X: nes.padBtns[0].a = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_Z: nes.padBtns[0].b = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_SPACE: nes.padBtns[0].select = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_RETURN: nes.padBtns[0].start = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_H: nes.cpu.setHook(CPU6502::HeatMapHook); break;
+            case SDL_SCANCODE_T: nes.cpu.setHook(CPU6502::TesterHook); break;
+            case SDL_SCANCODE_V: nes.cpu.setHook(CPU6502::VerboseTesterHook); break;
+            case SDL_SCANCODE_R: nes.cpu.setHook({}); break;
             case SDL_SCANCODE_F1: CPU6502::SetHeatMapReportThreshold(1); break;
             case SDL_SCANCODE_F2: CPU6502::SetHeatMapReportThreshold(10); break;
             case SDL_SCANCODE_F3: CPU6502::SetHeatMapReportThreshold(100); break;
@@ -199,25 +214,25 @@ int main(int argc, char* argv[]) {
           }
         } break;
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
-          if (ev.gbutton.button == SDL_GAMEPAD_BUTTON_NORTH) cpu.reset();
+          if (ev.gbutton.button == SDL_GAMEPAD_BUTTON_NORTH) nes.cpu.reset();
         } /* Intentional fallthrough */
         case SDL_EVENT_GAMEPAD_BUTTON_UP: {
           switch (ev.gbutton.button) {
-            case SDL_GAMEPAD_BUTTON_DPAD_LEFT: padBtns[0].left = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: padBtns[0].right = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            case SDL_GAMEPAD_BUTTON_DPAD_UP: padBtns[0].up = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            case SDL_GAMEPAD_BUTTON_DPAD_DOWN: padBtns[0].down = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            case SDL_GAMEPAD_BUTTON_SOUTH: padBtns[0].a = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            case SDL_GAMEPAD_BUTTON_EAST: padBtns[0].b = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            case SDL_GAMEPAD_BUTTON_BACK: padBtns[0].select = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            case SDL_GAMEPAD_BUTTON_START: padBtns[0].start = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_DPAD_LEFT: nes.padBtns[0].left = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: nes.padBtns[0].right = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_DPAD_UP: nes.padBtns[0].up = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_DPAD_DOWN: nes.padBtns[0].down = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_SOUTH: nes.padBtns[0].a = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_EAST: nes.padBtns[0].b = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_BACK: nes.padBtns[0].select = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_START: nes.padBtns[0].start = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
           }
         } break;
       }
     }
 
 #ifndef PENES_NO_SDL
-    auto frame = ppu.getFrame();
+    auto frame = nes.ppu.getFrame();
     SDL_UpdateTexture(tex, nullptr, frame.data(), 256 * 4);
     SDL_RenderClear(rend);
     SDL_RenderTexture(rend, tex, nullptr, nullptr);

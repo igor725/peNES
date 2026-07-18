@@ -1,6 +1,7 @@
 #include "../ines.hh"
 #include "mapper.hh"
 
+#include <cstdint>
 #include <memory>
 
 class MMC1: public Mapper {
@@ -15,6 +16,12 @@ class MMC1: public Mapper {
   }
 
   uint8_t cpuOperation(bool isWrite, uint16_t addr, uint8_t value) final {
+    if (addr >= 0x6000 && addr <= 0x7FFF) { // Battery backed memory
+      addr -= 0x6000;
+      if (isWrite) return m_memory[addr] = value;
+      return m_memory[addr];
+    }
+
     if (isWrite) {
       if (addr >= 0x8000) {
         if (value & 0x80) {
@@ -39,8 +46,11 @@ class MMC1: public Mapper {
             updateOffsets();
           }
         }
+
+        return value;
       }
-      return value;
+
+      throw;
     }
 
     if (addr >= 0x8000 && addr <= 0xBFFF) {
@@ -64,6 +74,8 @@ class MMC1: public Mapper {
     return {};
   }
 
+  std::pair<uint16_t, uint16_t> getMappedRegion() const { return {(*m_cartridge)->hdr.flags6.battery ? 0x6000 : 0x8000, 0xFFFF}; }
+
   private:
   uint32_t m_progBaseOff;
   uint32_t m_charBaseOff;
@@ -79,6 +91,8 @@ class MMC1: public Mapper {
   uint32_t m_prgOff1 = 0;
   uint32_t m_chrOff0 = 0x0000;
   uint32_t m_chrOff1 = 0x1000;
+
+  uint8_t m_memory[8192];
 
   void updateOffsets() {
     if (((m_ctlReg >> 4) & 0x01) /* chrMode */ == 0) {
