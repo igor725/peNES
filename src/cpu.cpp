@@ -1286,7 +1286,7 @@ uint8_t CPU6502::readRamByte(uint16_t addr) const {
     if (auto ret = handler->second(false, addr, 0); ret.has_value()) return ret.value();
   }
 
-  return m_bus;
+  return m_bus = (addr >> 8); // 100thCoin's accuracy test 2. Not sure if I want to get any further into this open bus rabbit hole
 }
 
 void CPU6502::preExecHook(InstructionStatus& status) {

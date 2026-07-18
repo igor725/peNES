@@ -400,7 +400,7 @@ class CPU6502: public MMU {
     bool m_intrClrSchd  : 1;
   };
 
-  uint8_t m_bus = 0;
+  mutable uint8_t m_bus = 0;
 
   uint8_t m_padding[6];
 

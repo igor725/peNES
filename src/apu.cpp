@@ -48,6 +48,8 @@ void APU::PulseChannel::clockEnvelope() {
 }
 
 void APU::PulseChannel::clock() {
+  if (!_haltCounter && _length > 0) _length--;
+
   uint16_t const target = sweepPeriod();
 
   if (_sweepCounter == 0 && _sweepEnabled && _sweepShift > 0 && _timerReload >= 8 && target <= 0x07FF) {
@@ -61,8 +63,6 @@ void APU::PulseChannel::clock() {
   }
 
   _sweepCounter -= 1;
-
-  if (!_haltCounter && _length > 0) _length--;
 }
 
 uint8_t APU::PulseChannel::output() const {
@@ -90,8 +90,8 @@ void APU::PulseChannel::operation(uint8_t opCode, uint8_t value) {
   } else if (opCode == 0x02) /* Timer Low */ {
     _timerReload = (_timerReload & 0x0700) | value;
   } else if (opCode == 0x03) /* Timer High / Length Load */ {
-    _timerReload   = (_timerReload & 0x00FF) | ((value & 0b111) << 8);
-    _length        = LENGTH_TABLE[value >> 3];
+    _timerReload = (_timerReload & 0x00FF) | ((value & 0b111) << 8);
+    if (_enabled) _length = LENGTH_TABLE[value >> 3];
     _envelopeStart = true;
   }
 }
@@ -241,6 +241,19 @@ bool APU::handleWrite(uint16_t addr, uint8_t value) {
   } else if (addr == 0x4017) /* Frame Counter */ {
     m_5stepSequence = (value & 0b10000000) > 0;
     m_irqInhibit    = (value & 0b01000000) > 0;
+    m_frameIrq      = false;
+    m_cycles        = 0;
+    m_step          = 0;
+
+    if (m_5stepSequence) {
+      m_triangle.clock();
+      m_triangle.advanceLength();
+      m_noise.advanceLength();
+      for (uint8_t i = 0; i < 2; ++i) {
+        m_pulse[i].clockEnvelope();
+        m_pulse[i].clock();
+      }
+    }
     return true;
   }
 
