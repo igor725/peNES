@@ -1,4 +1,5 @@
 #include "apu.hh"
+#include "cmdline.hh"
 #include "cpu.hh"
 #include "ines.hh"
 #include "ppu.hh"
@@ -64,18 +65,20 @@ struct Console {
   std::condition_variable _wait;
   std::jthread            _thread;
 
-  Console(): _ppu(_cpu), _apu(_cpu) {
+  Console(float volume): _ppu(_cpu), _apu(_cpu) {
 #ifndef PENES_NO_SDL
     SDL_AudioSpec spec;
 
     if (SDL_GetAudioDeviceFormat(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr)) {
       spec.channels = 1, spec.format = SDL_AUDIO_F32LE;
       if ((_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr)) != nullptr) {
-        SDL_SetAudioStreamGain(_stream, 0.3f);
+        SDL_SetAudioStreamGain(_stream, volume);
         SDL_ResumeAudioStreamDevice(_stream);
         _apu.setSamplingRate(spec.freq);
       }
     }
+
+    if (_stream == nullptr) _apu.setOutputEnabled(false);
 #endif
 
     _thread = std::jthread([this](std::stop_token stop) {
@@ -203,7 +206,9 @@ struct Console {
   }
 };
 
-int main(int argc, char* argv[]) {
+int32_t main(int32_t argc, char* argv[]) {
+  CmdlineParser args(argc, argv);
+
 #ifndef PENES_NO_SDL
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_AUDIO)) {
     std::cerr << "Failed to initialize SDL: " << SDL_GetError() << std::endl;
@@ -228,22 +233,23 @@ int main(int argc, char* argv[]) {
   SDL_SetRenderVSync(rend, 1);
 #endif
 
-  if (argc < 2) {
+  auto const nesRom = args.getSeqArg<std::string>(0);
+
+  if (!nesRom.has_value()) {
     std::cerr << "Usage: " << argv[0] << " </path/to/application.nes>" << std::endl;
     return 5;
   }
 
-  Console nes;
+  Console nes(args.getNamedArg<"volume">(0.3).value());
 
   try {
-    nes.put(argv[1]);
+    nes.put(nesRom.value());
   } catch (CartridgeException const& ex) {
     std::cerr << "Failed to load specified cartridge file: " << ex.what() << std::endl;
     return 6;
   }
 
 #ifndef PENES_NO_SDL
-
   std::array<Console::PadState, 2> currPadState;
 
   auto lastTime    = Console::Clock::now();
@@ -262,6 +268,9 @@ int main(int argc, char* argv[]) {
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
       switch (ev.type) {
+        case SDL_EVENT_WINDOW_FOCUS_GAINED:
+        case SDL_EVENT_WINDOW_FOCUS_LOST: nes._apu.setOutputEnabled(ev.type == SDL_EVENT_WINDOW_FOCUS_GAINED); break;
+
         case SDL_EVENT_WINDOW_CLOSE_REQUESTED: {
           stopped = true;
         } break;

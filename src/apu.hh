@@ -117,7 +117,7 @@ class APU {
 
   bool handleWrite(uint16_t addr, uint8_t value);
 
-  void setEnabled(bool state) { m_outEnabled = state; }
+  void setOutputEnabled(bool state) { m_outEnabled = state; }
 
   void setSamplingRate(double value) { m_cyclesPerSample = BASE_APU_FREQUENCY / value; }
 
