@@ -1105,12 +1105,11 @@ uint8_t CPU6502::handleIllegal(InstructionStatus& status) { /* All instructions 
 
   // TODO for me from the future: explore possibilities of calling actual instruction handlers above from here to combine them (less code reuse)
 
-  uint8_t cycles = 0, origValue = 0, resultValue = 0;
+  uint8_t cycles = 2 /* TODO calculate those */, origValue = 0, resultValue = 0;
   switch (status.flags.mnemonic) {
     case Mnemonic::SLO: {
       auto const evaluated = evaluateOperandToValue<uint8_t>(status);
 
-      cycles = 2;
       /* ASL */
       origValue   = std::get<2>(evaluated);
       resultValue = writeRamByte(std::get<1>(evaluated), origValue << 1);
@@ -1125,7 +1124,6 @@ uint8_t CPU6502::handleIllegal(InstructionStatus& status) { /* All instructions 
     case Mnemonic::RLA: {
       auto const evaluated = evaluateOperandToValue<uint8_t>(status);
 
-      cycles = 2;
       /* ROL */
       origValue   = std::get<2>(evaluated);
       resultValue = writeRamByte(std::get<1>(evaluated), (origValue << 1) | (m_regs.P.C ? 1 : 0));
@@ -1140,7 +1138,6 @@ uint8_t CPU6502::handleIllegal(InstructionStatus& status) { /* All instructions 
     case Mnemonic::SRE: {
       auto const evaluated = evaluateOperandToValue<uint8_t>(status);
 
-      cycles = 2;
       /* LSR */
       origValue   = std::get<2>(evaluated);
       resultValue = writeRamByte(std::get<1>(evaluated), origValue >> 1);
@@ -1155,7 +1152,6 @@ uint8_t CPU6502::handleIllegal(InstructionStatus& status) { /* All instructions 
     case Mnemonic::RRA: {
       auto const evaluated = evaluateOperandToValue<uint8_t>(status);
 
-      cycles = 2;
       /* ROR */
       origValue   = std::get<2>(evaluated);
       resultValue = writeRamByte(std::get<1>(evaluated), (origValue >> 1) | (m_regs.P.C ? 0x80 : 0x00));
@@ -1171,10 +1167,93 @@ uint8_t CPU6502::handleIllegal(InstructionStatus& status) { /* All instructions 
       m_regs.P.N = (m_regs.A & 0x80) > 0;
     } break;
     case Mnemonic::SAX: {
-      cycles = 2;
-
       auto const evaluated = evaluateOperandToValue<uint8_t>(status);
       writeRamByte(std::get<1>(evaluated), m_regs.A & m_regs.X);
+    } break;
+    case Mnemonic::LAX: {
+      auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+
+      m_regs.X = m_regs.A = std::get<2>(evaluated);
+      m_regs.P.Z          = m_regs.X == 0;
+      m_regs.P.N          = (m_regs.X & 0x80) > 0;
+    } break;
+    case Mnemonic::DCP: {
+      auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+
+      /* DEC */
+      auto const decRes = writeRamByte(std::get<1>(evaluated), std::get<2>(evaluated) - 1);
+
+      /* CMP */
+      uint8_t val = m_regs.A - decRes;
+      m_regs.P.C  = m_regs.A >= decRes;
+      m_regs.P.Z  = val == 0;
+      m_regs.P.N  = (val & 0x80) > 0;
+    } break;
+    case Mnemonic::ISC: {
+      auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+
+      /* INC */
+      auto const incRes = writeRamByte(std::get<1>(evaluated), std::get<2>(evaluated) + 1);
+
+      /* SBC */
+      uint8_t const  inverted_value = incRes ^ 0xFF;
+      uint16_t const res            = m_regs.A + inverted_value + (m_regs.P.C ? 1 : 0);
+
+      m_regs.P.V = ((m_regs.A ^ res) & (inverted_value ^ res) & 0x80) != 0;
+      m_regs.P.C = res > 0xFF;
+      m_regs.A   = res & 0xFF;
+      m_regs.P.Z = m_regs.A == 0;
+      m_regs.P.N = (m_regs.A & 0x80) > 0;
+    } break;
+    case Mnemonic::ANC: {
+      m_regs.A &= status.operand.u8;
+      m_regs.P.C = (m_regs.A & 0x80) > 0;
+      m_regs.P.N = (m_regs.A & 0x80) > 0;
+      m_regs.P.Z = m_regs.A == 0;
+    } break;
+    case Mnemonic::ASR: {
+      m_regs.A &= status.operand.u8;
+      m_regs.P.C = (m_regs.A & 0x01) != 0;
+      m_regs.A >>= 1;
+      m_regs.P.Z = (m_regs.A == 0);
+      m_regs.P.N = (m_regs.A & 0x80) != 0;
+    } break;
+    case Mnemonic::ARR: {
+      m_regs.A &= status.operand.u8;
+
+      m_regs.A   = (m_regs.A >> 1) | (m_regs.P.C ? 0x80 : 0x00);
+      m_regs.P.C = (m_regs.A & 0x40) != 0;
+      m_regs.P.V = ((m_regs.A >> 6) ^ (m_regs.A >> 5)) & 0x01;
+      m_regs.P.Z = (m_regs.A == 0);
+      m_regs.P.N = (m_regs.A & 0x80) != 0;
+    } break;
+    case Mnemonic::ANE: {
+      m_regs.A   = (m_regs.A | 0xee) & (m_regs.X & status.operand.u8);
+      m_regs.P.Z = m_regs.A == 0;
+      m_regs.P.N = (m_regs.A & 0x80) > 0;
+    } break;
+    case Mnemonic::LXA: {
+      m_regs.A   = (m_regs.A | 0xee) & status.operand.u8;
+      m_regs.X   = m_regs.A;
+      m_regs.P.Z = (m_regs.X == 0);
+      m_regs.P.N = (m_regs.X & 0x80) != 0;
+    } break;
+    case Mnemonic::AXS: {
+      uint8_t const res = m_regs.A & m_regs.X;
+
+      m_regs.P.C = (res >= status.operand.u8);
+      m_regs.X   = res - status.operand.u8;
+      m_regs.P.Z = (m_regs.X == 0);
+      m_regs.P.N = (m_regs.X & 0x80) != 0;
+    } break;
+    case Mnemonic::SBC: {
+      uint16_t val = (uint16_t)m_regs.A - (uint16_t)status.operand.u8 - (uint16_t)(m_regs.P.C ? 0 : 1);
+
+      m_regs.P.C = (val < 0x100);
+      m_regs.P.V = ((m_regs.A ^ (uint8_t)val) & (~status.operand.u8 ^ (uint8_t)val) & 0x80) != 0;
+      m_regs.A   = (uint8_t)val;
+      m_regs.P.Z = (m_regs.A == 0);
+      m_regs.P.N = (m_regs.A & 0x80) != 0;
     } break;
 
     default: break;
