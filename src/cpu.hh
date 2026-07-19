@@ -280,6 +280,13 @@ class CPU6502: public MMU {
     switch (status.flags.mnemonic) {
       case Mnemonic::STA: return false;
       case Mnemonic::ASL: return false;
+      case Mnemonic::SRE: return false;
+      case Mnemonic::LSR: return false;
+      case Mnemonic::ROR: return false;
+      case Mnemonic::ROL: return false;
+      case Mnemonic::DEC: return false;
+      case Mnemonic::INC: return false;
+      case Mnemonic::RRA: return false;
       default: return true;
     }
   }
@@ -384,7 +391,7 @@ class CPU6502: public MMU {
   uint8_t handleControl(InstructionStatus& status);
   uint8_t handleMath(InstructionStatus& status);
   uint8_t handleShift(InstructionStatus& status);
-  uint8_t handleUnknown(InstructionStatus& status);
+  uint8_t handleIllegal(InstructionStatus& status);
   uint8_t writeRamByte(uint16_t addr, uint8_t value);
   uint8_t readRamByte(uint16_t addr) const;
   void    preExecHook(InstructionStatus& status);

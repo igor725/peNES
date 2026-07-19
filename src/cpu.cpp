@@ -724,53 +724,35 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
 
       uint8_t origValue = 0, resultValue = 0, cycles = 0;
       switch (status.getAddrMode()) {
-        case 0x00: /* JAM */ throw;
-        case 0x01: /* ASL zp */ {
-          status << AddrMode::ZeroPage;
-          auto const evaluated = evaluateOperandToValue<uint8_t>(status);
-
-          cycles      = 4 + std::get<0>(evaluated);
-          origValue   = std::get<2>(evaluated);
-          resultValue = writeRamByte(std::get<1>(evaluated), origValue << 1);
-        } break;
+        case 0x00: /* JAM */ return 0;
+        case 0x01: /* ASL zp */ status << AddrMode::ZeroPage; break;
         case 0x02: /* ASL A */ {
           status << AddrMode::Accum;
 
           cycles      = 2;
           origValue   = m_regs.A;
           resultValue = (m_regs.A <<= 1);
+          goto leave_early_ASL;
         } break;
-        case 0x03: /* ASL abs */ {
-          status << AddrMode::Absolute;
-          auto const evaluated = evaluateOperandToValue<uint8_t>(status);
-
-          cycles      = 4 + std::get<0>(evaluated);
-          origValue   = std::get<2>(evaluated);
-          resultValue = writeRamByte(status.operand.u16, origValue << 1);
-        } break;
+        case 0x03: /* ASL abs */ status << AddrMode::Absolute; break;
         case 0x04: /* JAM */ throw;
-        case 0x05: /* ASL zp,X */ {
-          status << AddrMode::ZeroPageX;
-          auto const evaluated = evaluateOperandToValue<uint8_t>(status);
-
-          cycles      = 4 + std::get<0>(evaluated);
-          origValue   = std::get<2>(evaluated);
-          resultValue = writeRamByte(std::get<1>(evaluated), origValue << 1);
-        } break;
+        case 0x05: /* ASL zp,X */ status << AddrMode::ZeroPageX; break;
         case 0x06: /* NOP impl (illegal) */ {
           status << Mnemonic::NOP << AddrMode::Implied;
           return postExecHook(status, 2);
         } break;
-        case 0x07: /* ASL abs,X */ {
-          status << AddrMode::AbsoluteX;
-          auto const evaluated = evaluateOperandToValue<uint8_t>(status);
-
-          cycles      = 5 + std::get<0>(evaluated);
-          origValue   = std::get<2>(evaluated);
-          resultValue = writeRamByte(std::get<1>(evaluated), origValue << 1);
-        } break;
+        case 0x07: /* ASL abs,X */ cycles += 1, status << AddrMode::AbsoluteX; break;
       }
 
+      {
+        auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+
+        cycles += 4 + std::get<0>(evaluated);
+        origValue   = std::get<2>(evaluated);
+        resultValue = writeRamByte(std::get<1>(evaluated), origValue << 1);
+      }
+
+    leave_early_ASL:
       m_regs.P.C = (origValue & 0x80) > 0;
       m_regs.P.Z = (resultValue == 0);
       m_regs.P.N = (resultValue & 0x80) > 0;
@@ -781,55 +763,35 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
 
       status << Mnemonic::ROL;
       switch (status.getAddrMode()) {
-        case 0x00: /* JAM */ throw;
-        case 0x01: /* ROL zp */ {
-          status << AddrMode::ZeroPage;
-
-          cycles      = 5;
-          origValue   = readRamByte(status.operand.u8);
-          resultValue = (origValue << 1) | (m_regs.P.C ? 1 : 0);
-          writeRamByte(status.operand.u8, resultValue);
-        } break;
+        case 0x00: /* JAM */ return 0;
+        case 0x01: /* ROL zp */ status << AddrMode::ZeroPage; break;
         case 0x02: /* ROL A */ {
           status << AddrMode::Accum;
 
           cycles      = 2;
           origValue   = m_regs.A;
           resultValue = (m_regs.A = (origValue << 1) | (m_regs.P.C ? 1 : 0));
+          goto leave_early_ROL;
         } break;
-        case 0x03: /* ROL abs */ {
-          status << AddrMode::Absolute;
-
-          cycles      = 6;
-          origValue   = readRamByte(status.operand.u16);
-          resultValue = (origValue << 1) | (m_regs.P.C ? 1 : 0);
-          writeRamByte(status.operand.u16, resultValue);
-        } break;
+        case 0x03: /* ROL abs */ status << AddrMode::Absolute; break;
         case 0x04: /* JAM */ throw;
-        case 0x05: /* ROL zp,X */ {
-          status << AddrMode::ZeroPageX;
-          uint8_t const addr = static_cast<uint8_t>(status.operand.u8 + m_regs.X);
-
-          cycles      = 6;
-          origValue   = readRamByte(addr);
-          resultValue = (origValue << 1) | (m_regs.P.C ? 1 : 0);
-          writeRamByte(addr, resultValue);
-        } break;
+        case 0x05: /* ROL zp,X */ status << AddrMode::ZeroPageX; break;
         case 0x06: /* NOP impl (illegal) */ {
           status << Mnemonic::NOP << AddrMode::Implied;
           return postExecHook(status, 2);
         } break;
-        case 0x07: /* ROL abs,X */ {
-          status << AddrMode::AbsoluteX;
-          uint16_t const addr = status.operand.u16 + m_regs.X;
-
-          cycles      = 7;
-          origValue   = readRamByte(addr);
-          resultValue = (origValue << 1) | (m_regs.P.C ? 1 : 0);
-          writeRamByte(addr, resultValue);
-        } break;
+        case 0x07: /* ROL abs,X */ cycles += 1, status << AddrMode::AbsoluteX; break;
       }
 
+      {
+        auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+
+        cycles += 4 + std::get<0>(evaluated);
+        origValue   = std::get<2>(evaluated);
+        resultValue = writeRamByte(std::get<1>(evaluated), (origValue << 1) | (m_regs.P.C ? 1 : 0));
+      }
+
+    leave_early_ROL:
       m_regs.P.C = (origValue & 0x80) != 0;
       m_regs.P.Z = (resultValue == 0);
       m_regs.P.N = (resultValue & 0x80) != 0;
@@ -841,50 +803,34 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
 
       switch (status.getAddrMode()) {
         case 0x00: /* JAM */ throw;
-        case 0x01: /* LSR zp */ {
-          status << AddrMode::ZeroPage;
-
-          cycles      = 5;
-          origValue   = readRamByte(status.operand.u8);
-          resultValue = writeRamByte(status.operand.u8, origValue >> 1);
-        } break;
+        case 0x01: /* LSR zp */ status << AddrMode::ZeroPage; break;
         case 0x02: /* LSR A */ {
           status << AddrMode::Accum;
 
           cycles      = 2;
           origValue   = m_regs.A;
           resultValue = (m_regs.A >>= 1);
+          goto leave_early_LSR;
         } break;
-        case 0x03: /* LSR abs */ {
-          status << AddrMode::Absolute;
-
-          cycles      = 6;
-          origValue   = readRamByte(status.operand.u16);
-          resultValue = writeRamByte(status.operand.u16, origValue >> 1);
-        } break;
+        case 0x03: /* LSR abs */ status << AddrMode::Absolute; break;
         case 0x04: /* JAM */ throw;
-        case 0x05: /* LSR zp,X */ {
-          status << AddrMode::ZeroPageX;
-          auto const addr = static_cast<uint8_t>(status.operand.u8 + m_regs.X);
-
-          cycles      = 6;
-          origValue   = readRamByte(addr);
-          resultValue = writeRamByte(addr, origValue >> 1);
-        } break;
+        case 0x05: /* LSR zp,X */ status << AddrMode::ZeroPageX; break;
         case 0x06: /* NOP impl (illegal) */ {
           status << Mnemonic::NOP << AddrMode::Implied;
           return postExecHook(status, 2);
         } break;
-        case 0x07: /* LSR abs,X */ {
-          status << AddrMode::AbsoluteX;
-          auto const addr = static_cast<uint16_t>(status.operand.u16 + m_regs.X);
-
-          cycles      = 7;
-          origValue   = readRamByte(addr);
-          resultValue = writeRamByte(addr, origValue >> 1);
-        } break;
+        case 0x07: /* LSR abs,X */ cycles += 1, status << AddrMode::AbsoluteX; break;
       }
 
+      {
+        auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+
+        cycles += 4 + std::get<0>(evaluated);
+        origValue   = std::get<2>(evaluated);
+        resultValue = writeRamByte(std::get<1>(evaluated), origValue >> 1);
+      }
+
+    leave_early_LSR:
       m_regs.P.N = 0;
       m_regs.P.Z = resultValue == 0;
       m_regs.P.C = (origValue & 0x01) != 0;
@@ -895,59 +841,34 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
 
       switch (status.getAddrMode()) {
         case 0x00: /* JAM */ throw;
-        case 0x01: /* ROR zp */ {
-          status << Mnemonic::ROR << AddrMode::ZeroPage;
-
-          cycles      = 5;
-          origValue   = readRamByte(status.operand.u8);
-          resultValue = (origValue >> 1) | (m_regs.P.C ? 0x80 : 0x00);
-          writeRamByte(status.operand.u8, resultValue);
-        } break;
+        case 0x01: /* ROR zp */ status << Mnemonic::ROR << AddrMode::ZeroPage; break;
         case 0x02: /* ROR A */ {
           status << Mnemonic::ROR << AddrMode::Accum;
 
-          uint8_t incoming_carry = m_regs.P.C ? 0x80 : 0x00;
-          uint8_t shifted_value  = (m_regs.A >> 1) | incoming_carry;
-          m_regs.P.C             = (m_regs.A & 0x01) != 0;
-
-          m_regs.A   = shifted_value;
-          m_regs.P.Z = (shifted_value == 0);
-          m_regs.P.N = (shifted_value & 0x80) != 0;
-          return postExecHook(status, 2);
+          cycles      = 2;
+          origValue   = m_regs.A;
+          resultValue = (m_regs.A = (origValue >> 1) | (m_regs.P.C ? 0x80 : 0x00));
+          goto leave_early_ROR;
         } break;
-        case 0x03: /* ROR abs */ {
-          status << Mnemonic::ROR << AddrMode::Absolute;
-
-          cycles      = 6;
-          origValue   = readRamByte(status.operand.u16);
-          resultValue = (origValue >> 1) | (m_regs.P.C ? 0x80 : 0x00);
-          writeRamByte(status.operand.u16, resultValue);
-        } break;
+        case 0x03: /* ROR abs */ status << Mnemonic::ROR << AddrMode::Absolute; break;
         case 0x04: /* JAM */ throw;
-        case 0x05: /* ROR zp,X */ {
-          status << Mnemonic::ROR << AddrMode::ZeroPageX;
-          uint16_t const addr = static_cast<uint8_t>(status.operand.u8 + m_regs.X);
-
-          cycles      = 6;
-          origValue   = readRamByte(addr);
-          resultValue = (origValue >> 1) | (m_regs.P.C ? 0x80 : 0x00);
-          writeRamByte(addr, resultValue);
-        } break;
+        case 0x05: /* ROR zp,X */ status << Mnemonic::ROR << AddrMode::ZeroPageX; break;
         case 0x06: /* NOP impl (illegal) */ {
           status << Mnemonic::NOP << AddrMode::Implied;
           return postExecHook(status, 2);
         } break;
-        case 0x07: /* ROR abs,X */ {
-          status << Mnemonic::ROR << AddrMode::AbsoluteX;
-          uint16_t const addr = status.operand.u16 + m_regs.X;
-
-          cycles      = 7;
-          origValue   = readRamByte(addr);
-          resultValue = (origValue >> 1) | (m_regs.P.C ? 0x80 : 0x00);
-          writeRamByte(addr, resultValue);
-        } break;
+        case 0x07: /* ROR abs,X */ cycles += 1, status << Mnemonic::ROR << AddrMode::AbsoluteX; break;
       }
 
+      {
+        auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+
+        cycles += 4 + std::get<0>(evaluated);
+        origValue   = std::get<2>(evaluated);
+        resultValue = writeRamByte(std::get<1>(evaluated), (origValue >> 1) | (m_regs.P.C ? 0x80 : 0x00));
+      }
+
+    leave_early_ROR:
       m_regs.P.C = (origValue & 0x01) != 0;
       m_regs.P.Z = (resultValue == 0);
       m_regs.P.N = (resultValue & 0x80) != 0;
@@ -1061,7 +982,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
       return postExecHook(status, cycles);
     } break;
     case 0x06: {
-      uint8_t resultValue = 0, cycles = 0;
+      uint8_t origValue = 0, resultValue = 0, cycles = 0;
 
       status << Mnemonic::DEC;
       switch (status.getAddrMode()) {
@@ -1069,53 +990,40 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
           status << Mnemonic::NOP << AddrMode::Immediate;
           return postExecHook(status, 2);
         } break;
-        case 0x01: /* DEC zp */ {
-          status << AddrMode::ZeroPage;
-
-          cycles      = 5;
-          resultValue = writeRamByte(status.operand.u8, readRamByte(status.operand.u8) - 1);
-        } break;
+        case 0x01: /* DEC zp */ status << AddrMode::ZeroPage; break;
         case 0x02: /* DEX */ {
           status << Mnemonic::DEX << AddrMode::Implied;
 
-          m_regs.X -= 1;
-          m_regs.P.Z = m_regs.X == 0;
-          m_regs.P.N = (m_regs.X & 0x80) > 0;
-          return postExecHook(status, 2);
+          cycles      = 2;
+          origValue   = m_regs.X;
+          resultValue = (m_regs.X -= 1);
+          goto leave_early_DEC;
         } break;
-        case 0x03: /* DEC abs */ {
-          status << AddrMode::Absolute;
-
-          cycles      = 6;
-          resultValue = writeRamByte(status.operand.u16, readRamByte(status.operand.u16) - 1);
-        } break;
+        case 0x03: /* DEC abs */ status << AddrMode::Absolute; break;
         case 0x04: /* JAM */ throw;
-        case 0x05: /* DEC zp,X */ {
-          status << AddrMode::ZeroPageX;
-          auto const addr = static_cast<uint8_t>(status.operand.u8 + m_regs.X);
-
-          cycles      = 6;
-          resultValue = writeRamByte(addr, readRamByte(addr) - 1);
-        } break;
+        case 0x05: /* DEC zp,X */ status << AddrMode::ZeroPageX; break;
         case 0x06: /* NOP impl (illegal) */ {
           status << Mnemonic::NOP << AddrMode::Implied;
           return postExecHook(status, 2);
         } break;
-        case 0x07: /* DEC abs,X */ {
-          status << AddrMode::AbsoluteX;
-          auto const addr = status.operand.u16 + m_regs.X;
-
-          cycles      = 7;
-          resultValue = writeRamByte(addr, readRamByte(addr) - 1);
-        } break;
+        case 0x07: /* DEC abs,X */ cycles += 1, status << AddrMode::AbsoluteX; break;
       }
 
+      {
+        auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+
+        cycles += 4 + std::get<0>(evaluated);
+        origValue   = std::get<2>(evaluated);
+        resultValue = writeRamByte(std::get<1>(evaluated), origValue - 1);
+      }
+
+    leave_early_DEC:
       m_regs.P.Z = resultValue == 0;
       m_regs.P.N = (resultValue & 0x80) > 0;
       return postExecHook(status, cycles);
     } break;
     case 0x07: {
-      uint8_t resultValue = 0, cycles = 0;
+      uint8_t origValue = 0, resultValue = 0, cycles = 0;
 
       status << Mnemonic::INC;
       switch (status.getAddrMode()) {
@@ -1123,41 +1031,27 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
           status << Mnemonic::NOP << AddrMode::Immediate;
           return postExecHook(status, 2);
         } break;
-        case 0x01: /* INC zp */ {
-          status << AddrMode::ZeroPage;
-
-          cycles      = 5;
-          resultValue = writeRamByte(status.operand.u8, readRamByte(status.operand.u8) + 1);
-        } break;
+        case 0x01: /* INC zp */ status << AddrMode::ZeroPage; break;
         case 0x02: /* NOP impl (legal) */ {
           status << Mnemonic::NOP << AddrMode::Implied;
           return postExecHook(status, 2);
         } break;
-        case 0x03: /* INC abs */ {
-          status << AddrMode::Absolute;
-
-          cycles      = 6;
-          resultValue = writeRamByte(status.operand.u16, readRamByte(status.operand.u16) + 1);
-        } break;
+        case 0x03: /* INC abs */ status << AddrMode::Absolute; break;
         case 0x04: /* JAM */ throw;
-        case 0x05: /* INC zp,X */ {
-          status << AddrMode::ZeroPageX;
-          auto const addr = static_cast<uint8_t>(status.operand.u8 + m_regs.X);
-
-          cycles      = 6;
-          resultValue = writeRamByte(addr, readRamByte(addr) + 1);
-        } break;
+        case 0x05: /* INC zp,X */ status << AddrMode::ZeroPageX; break;
         case 0x06: /* NOP impl (illegal) */ {
           status << Mnemonic::NOP << AddrMode::Implied;
           return postExecHook(status, 2);
         } break;
-        case 0x07: /* INC abs,X */ {
-          status << AddrMode::AbsoluteX;
-          auto const addr = status.operand.u16 + m_regs.X;
+        case 0x07: /* INC abs,X */ cycles += 1, status << AddrMode::AbsoluteX; break;
+      }
 
-          cycles      = 7;
-          resultValue = writeRamByte(addr, readRamByte(addr) + 1);
-        } break;
+      {
+        auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+
+        cycles += 4 + std::get<0>(evaluated);
+        origValue   = std::get<2>(evaluated);
+        resultValue = writeRamByte(std::get<1>(evaluated), origValue + 1);
       }
 
       m_regs.P.Z = resultValue == 0;
@@ -1169,7 +1063,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
   throw UnhandledInstruction();
 }
 
-uint8_t CPU6502::handleUnknown(InstructionStatus& status) { /* All instructions below are illegal */
+uint8_t CPU6502::handleIllegal(InstructionStatus& status) { /* All instructions below are illegal */
   const auto addrMode = [](uint8_t opc, uint8_t am) -> AddrMode {
     static AddrMode addrModes[] = {AddrMode::IndexedXIndir, AddrMode::ZeroPage,  AddrMode::Immediate, AddrMode::Absolute,
                                    AddrMode::IndirIndexedY, AddrMode::ZeroPageX, AddrMode::AbsoluteY, AddrMode::AbsoluteX};
@@ -1209,7 +1103,84 @@ uint8_t CPU6502::handleUnknown(InstructionStatus& status) { /* All instructions 
     } break;
   }
 
-  return postExecHook(status, 0);
+  // TODO for me from the future: explore possibilities of calling actual instruction handlers above from here to combine them (less code reuse)
+
+  uint8_t cycles = 0, origValue = 0, resultValue = 0;
+  switch (status.flags.mnemonic) {
+    case Mnemonic::SLO: {
+      auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+
+      cycles = 2;
+      /* ASL */
+      origValue   = std::get<2>(evaluated);
+      resultValue = writeRamByte(std::get<1>(evaluated), origValue << 1);
+
+      /* ORA */
+      m_regs.A |= resultValue;
+
+      m_regs.P.C = (origValue & 0x80) > 0;
+      m_regs.P.Z = m_regs.A == 0;
+      m_regs.P.N = (m_regs.A & 0x80) > 0;
+    } break;
+    case Mnemonic::RLA: {
+      auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+
+      cycles = 2;
+      /* ROL */
+      origValue   = std::get<2>(evaluated);
+      resultValue = writeRamByte(std::get<1>(evaluated), (origValue << 1) | (m_regs.P.C ? 1 : 0));
+
+      /* AND */
+      m_regs.A &= resultValue;
+
+      m_regs.P.C = (origValue & 0x80) != 0;
+      m_regs.P.Z = m_regs.A == 0;
+      m_regs.P.N = (m_regs.A & 0x80) > 0;
+    } break;
+    case Mnemonic::SRE: {
+      auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+
+      cycles = 2;
+      /* LSR */
+      origValue   = std::get<2>(evaluated);
+      resultValue = writeRamByte(std::get<1>(evaluated), origValue >> 1);
+
+      /* EOR */
+      m_regs.A ^= resultValue;
+
+      m_regs.P.C = (origValue & 0x01) != 0;
+      m_regs.P.Z = m_regs.A == 0;
+      m_regs.P.N = (m_regs.A & 0x80) > 0;
+    } break;
+    case Mnemonic::RRA: {
+      auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+
+      cycles = 2;
+      /* ROR */
+      origValue   = std::get<2>(evaluated);
+      resultValue = writeRamByte(std::get<1>(evaluated), (origValue >> 1) | (m_regs.P.C ? 0x80 : 0x00));
+      m_regs.P.C  = (origValue & 0x01) != 0;
+
+      /* ADC */
+      uint16_t result = m_regs.A + resultValue + m_regs.P.C;
+
+      m_regs.P.V = (~(m_regs.A ^ resultValue) & (m_regs.A ^ result) & 0x80) != 0;
+      m_regs.P.C = result > 0xFF;
+      m_regs.A   = result & 0xFF;
+      m_regs.P.Z = m_regs.A == 0;
+      m_regs.P.N = (m_regs.A & 0x80) > 0;
+    } break;
+    case Mnemonic::SAX: {
+      cycles = 2;
+
+      auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+      writeRamByte(std::get<1>(evaluated), m_regs.A & m_regs.X);
+    } break;
+
+    default: break;
+  }
+
+  return postExecHook(status, cycles);
 }
 
 uint8_t CPU6502::step() {
@@ -1241,7 +1212,7 @@ uint8_t CPU6502::step() {
       case InstClass::Control: return handleControl(s); break;
       case InstClass::Math: return handleMath(s); break;
       case InstClass::Shift: return handleShift(s); break;
-      case InstClass::Unknown: return handleUnknown(s);
+      case InstClass::Unknown: return handleIllegal(s);
     }
   } catch (SkipInstruction const& ex) {
     s.flags.stage = ExecStage::SkipExec;
