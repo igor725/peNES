@@ -7,13 +7,22 @@
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_render.h>
-#include <SDL3/SDL_timer.h>
 #include <cassert>
+#include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
+#include <mutex>
+#include <stop_token>
+#include <thread>
 
 struct Console {
+  using Clock = std::chrono::steady_clock;
+  using Delta = std::chrono::duration<double>;
+
+  static constexpr auto TARGET_FRAMETIME = Delta(1.0 / 60.0988);
+
   union PadState {
     struct {
       uint8_t a      : 1;
@@ -28,8 +37,6 @@ struct Console {
 
     uint8_t _raw = 0;
 
-    uint8_t getFirstBtnState() const { return a; }
-
     uint8_t shift() {
       uint8_t ret = _raw & 0x01;
       _raw >>= 1;
@@ -38,52 +45,106 @@ struct Console {
     }
   };
 
-  CPU6502 cpu;
-  PPU     ppu;
-  APU     apu;
-  iNES    cartridge;
+  CPU6502 _cpu;
+  PPU     _ppu;
+  APU     _apu;
+  iNES    _cartridge;
 
-  PadState padBtns[2], padShift[2];
+  std::array<PadState, 2> _padBtns;
+  std::array<PadState, 2> _padShift;
 
-  SDL_AudioStream* stream;
+  SDL_AudioStream* _stream = nullptr;
 
-  Console(): ppu(cpu), apu(cpu) {
+  std::atomic<double> _cyclesDebt = 0;
+  std::atomic<double> _speed      = 100.0; // We're starting at 100%
+  Clock::time_point   _nextCheck  = {};
+  uint8_t             _ticks      = 0;
+
+  std::mutex              _sync;
+  std::condition_variable _wait;
+  std::jthread            _thread;
+
+  Console(): _ppu(_cpu), _apu(_cpu) {
 #ifndef PENES_NO_SDL
-    SDL_AudioSpec spec = {
-        .format   = SDL_AUDIO_F32LE,
-        .channels = 1,
-        .freq     = 48000,
-    };
+    SDL_AudioSpec spec;
 
-    if ((stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr)) != nullptr) {
-      SDL_SetAudioStreamGain(stream, 0.3f);
-      SDL_ResumeAudioStreamDevice(stream);
+    if (SDL_GetAudioDeviceFormat(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr)) {
+      spec.channels = 1, spec.format = SDL_AUDIO_F32LE;
+      if ((_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr)) != nullptr) {
+        SDL_SetAudioStreamGain(_stream, 0.3f);
+        SDL_ResumeAudioStreamDevice(_stream);
+        _apu.setSamplingRate(spec.freq);
+      }
     }
 #endif
+
+    _thread = std::jthread([this](std::stop_token stop) {
+      constexpr double AVG_ALPHA = 0.1;
+
+      auto lastTime = Clock::now();
+
+      while (!stop.stop_requested()) {
+        while (_cyclesDebt > 0 && !_ppu.isFrameReady() && !stop.stop_requested()) {
+          auto const cyclesMade = _cpu.step();
+          if (cyclesMade >= 1) {
+            _apu.step(cyclesMade);
+            _ppu.run(cyclesMade * 3);
+          }
+          _cyclesDebt -= (double)cyclesMade;
+        }
+
+        if (_ppu.isFrameReady()) {
+          auto const currentTime = Clock::now();
+
+          if (currentTime > _nextCheck) {
+            _speed     = AVG_ALPHA * ((_ticks * TARGET_FRAMETIME.count()) * 100.0) + (1.0 - AVG_ALPHA) * _speed;
+            _nextCheck = currentTime + std::chrono::seconds(1);
+            _ticks     = 0;
+          }
+
+          if (auto timeElapsed = currentTime - lastTime; timeElapsed < TARGET_FRAMETIME) {
+            std::this_thread::sleep_for(TARGET_FRAMETIME - timeElapsed);
+          }
+
+          std::unique_lock lock(_sync);
+          _wait.wait(lock, [&] { return !_ppu.isFrameReady() || stop.stop_requested(); });
+
+          lastTime = currentTime;
+          _ticks += 1;
+        } else {
+          std::this_thread::yield();
+        }
+      }
+    });
   }
 
-  virtual ~Console() = default;
+  ~Console() {
+    _thread.request_stop();
+    _wait.notify_one();
+  }
+
+  auto tryLock() { return std::unique_lock(_sync, std::try_to_lock); }
 
   void put(std::filesystem::path const& nesFile) {
-    cartridge.insert(nesFile);
+    _cartridge.insert(nesFile);
 
     // PPU handler
-    cpu.addRangeHandler({0x2000, 0x3FFF}, [&](bool isWrite, uint16_t addr, uint8_t value) -> std::optional<uint8_t> {
-      if (isWrite) return ppu.cpuWrite(addr, value);
-      return ppu.cpuRead(addr);
+    _cpu.addRangeHandler({0x2000, 0x3FFF}, [&](bool isWrite, uint16_t addr, uint8_t value) -> std::optional<uint8_t> {
+      if (isWrite) return _ppu.cpuWrite(addr, value);
+      return _ppu.cpuRead(addr);
     });
 
     // PPU, APU, I/O handler
-    cpu.addRangeHandler({0x4000, 0x4017}, [&, latch = false](bool isWrite, uint16_t addr, uint8_t value) mutable -> std::optional<uint8_t> {
+    _cpu.addRangeHandler({0x4000, 0x4017}, [&, latch = false](bool isWrite, uint16_t addr, uint8_t value) mutable -> std::optional<uint8_t> {
       if (isWrite) {
-        if (apu.handleWrite(addr, value)) {
+        if (_apu.handleWrite(addr, value)) {
           return 0;
         } else if (addr == 0x4014) {
-          return ppu.dmaWrite(value);
+          return _ppu.dmaWrite(value);
         } else if (addr == 0x4016) {
           if ((latch = (value & 0x01)) == 0x01) {
-            padShift[0] = padBtns[0];
-            padShift[1] = padBtns[1];
+            _padShift[0] = _padBtns[0];
+            _padShift[1] = _padBtns[1];
           }
 
           return 0;
@@ -92,54 +153,53 @@ struct Console {
         throw;
       }
 
-      if (auto res = apu.handleRead(addr); res.has_value()) {
+      if (auto res = _apu.handleRead(addr); res.has_value()) {
         return res.value();
       } else if (addr >= 0x4016 && addr <= 0x4017) { // Read gamepad
         auto const pNum = addr == 0x4016 ? 0 : 1;
-        if (latch) return padBtns[pNum].getFirstBtnState();
-        return padShift[pNum].shift();
+        if (latch) {
+          _padShift[pNum].a = 1;
+          return _padShift[pNum].a & 0b1;
+        }
+        return _padShift[pNum].shift();
       }
 
       return {};
     });
 
     // SRAM, PRG-RAM, PRG-ROM handler
-    cpu.addRangeHandler(cartridge.getMapper()->getMappedRegion(), [&](bool isWrite, uint16_t addr, uint8_t value) -> uint8_t {
+    _cpu.addRangeHandler(_cartridge.getMapper()->getMappedRegion(), [&](bool isWrite, uint16_t addr, uint8_t value) -> uint8_t {
       // Let mapper handle this stuff
-      return cartridge.getMapper()->cpuOperation(isWrite, addr, value);
+      return _cartridge.getMapper()->cpuOperation(isWrite, addr, value);
     });
 
     // PPU CHR handler
-    ppu.addRangeHandler({0x0000, 0x1FFF}, [&](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
-      auto const romAddr = cartridge.getMapper()->resolvePPU(addr);
+    _ppu.addRangeHandler({0x0000, 0x1FFF}, [&](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
+      auto const romAddr = _cartridge.getMapper()->resolvePPU(addr);
       if (!romAddr.has_value()) /* No CHR data in cartridge */ {
-        auto const chrRam = ppu.prepareCHRMemory();
+        auto const chrRam = _ppu.prepareCHRMemory();
         if (isWrite) return chrRam[addr] = value;
         return chrRam[addr];
       }
 
       // Skip all writes
-      if (!cartridge.checkBounds(*romAddr)) throw;
-      return cartridge->data[*romAddr];
+      if (!_cartridge.checkBounds(*romAddr)) throw;
+      return _cartridge->data[*romAddr];
     });
 
 #ifndef PENES_NO_SDL
     // Audio data pusher
-    apu.onData([&](float sample) { SDL_PutAudioStreamData(stream, &sample, 4); });
+    _apu.onData([&](float sample) { SDL_PutAudioStreamData(_stream, &sample, 4); });
 #endif
 
-    if (cartridge->isVerticalMirror()) ppu.setVerticalMirroring();
-    cpu.reset();
+    if (_cartridge->isVerticalMirror()) _ppu.setVerticalMirroring();
+    _cpu.reset();
   }
 
-  void step() {
-    while (!ppu.isFrameReady()) {
-      auto cycles = cpu.step();
-      if (cycles >= 1) {
-        ppu.run(cycles * 3);
-        apu.step(cycles);
-      }
-    }
+  std::span<uint32_t const> step(std::unique_lock<std::mutex> const& lock, Delta time) {
+    _cyclesDebt += CPU6502::BASE_CLOCK_FREQUENCY * time.count();
+    if (!lock.owns_lock() || !_ppu.isFrameReady()) return {};
+    return _ppu.getFrame();
   }
 };
 
@@ -183,26 +243,20 @@ int main(int argc, char* argv[]) {
   }
 
 #ifndef PENES_NO_SDL
-  constexpr double TARGET_FRAMETIME = 1.0 / 60.0988;
 
-  uint64_t     lastTime = SDL_GetPerformanceCounter();
-  double const perfFreq = static_cast<double>(SDL_GetPerformanceFrequency());
+  std::array<Console::PadState, 2> currPadState;
 
-  bool    stopped     = false;
-  uint8_t ticks       = 0;
-  double  nextMeasure = 0.0, accumulator = 0.0;
+  auto lastTime    = Console::Clock::now();
+  auto nextMeasure = lastTime;
+
+  bool stopped = false;
   while (!stopped) {
-    uint64_t     currentTime = SDL_GetPerformanceCounter();
-    double const delta       = static_cast<double>(currentTime - lastTime) / perfFreq;
+    auto const currentTime = Console::Clock::now();
+    auto const delta       = currentTime - lastTime;
 
-    if ((nextMeasure -= delta) <= 0.0) {
-      SDL_SetWindowTitle(window, std::format("peNES speed: {:0.2f}%", ((float)ticks * TARGET_FRAMETIME) * 100.0f).c_str());
-      nextMeasure = 1, ticks = 0;
-    }
-
-    if ((accumulator += delta) > TARGET_FRAMETIME) {
-      ticks += 1, accumulator -= TARGET_FRAMETIME;
-      nes.step();
+    if (currentTime >= nextMeasure) {
+      SDL_SetWindowTitle(window, std::format("peNES speed: {:0.2f}%", nes._speed.load()).c_str());
+      nextMeasure = Console::Clock::now() + std::chrono::seconds(1);
     }
 
     SDL_Event ev;
@@ -212,21 +266,21 @@ int main(int argc, char* argv[]) {
           stopped = true;
         } break;
         case SDL_EVENT_KEY_DOWN:
-          if (ev.key.scancode == SDL_SCANCODE_ESCAPE) nes.cpu.reset();
+          if (ev.key.scancode == SDL_SCANCODE_ESCAPE) nes._cpu.reset();
         case SDL_EVENT_KEY_UP: {
           switch (ev.key.scancode) {
-            case SDL_SCANCODE_LEFT: nes.padBtns[0].left = ev.type == SDL_EVENT_KEY_DOWN; break;
-            case SDL_SCANCODE_RIGHT: nes.padBtns[0].right = ev.type == SDL_EVENT_KEY_DOWN; break;
-            case SDL_SCANCODE_UP: nes.padBtns[0].up = ev.type == SDL_EVENT_KEY_DOWN; break;
-            case SDL_SCANCODE_DOWN: nes.padBtns[0].down = ev.type == SDL_EVENT_KEY_DOWN; break;
-            case SDL_SCANCODE_X: nes.padBtns[0].a = ev.type == SDL_EVENT_KEY_DOWN; break;
-            case SDL_SCANCODE_Z: nes.padBtns[0].b = ev.type == SDL_EVENT_KEY_DOWN; break;
-            case SDL_SCANCODE_SPACE: nes.padBtns[0].select = ev.type == SDL_EVENT_KEY_DOWN; break;
-            case SDL_SCANCODE_RETURN: nes.padBtns[0].start = ev.type == SDL_EVENT_KEY_DOWN; break;
-            case SDL_SCANCODE_H: nes.cpu.setHook(CPU6502::HeatMapHook); break;
-            case SDL_SCANCODE_T: nes.cpu.setHook(CPU6502::TesterHook); break;
-            case SDL_SCANCODE_V: nes.cpu.setHook(CPU6502::VerboseTesterHook); break;
-            case SDL_SCANCODE_R: nes.cpu.setHook({}); break;
+            case SDL_SCANCODE_LEFT: currPadState[0].left = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_RIGHT: currPadState[0].right = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_UP: currPadState[0].up = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_DOWN: currPadState[0].down = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_X: currPadState[0].a = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_Z: currPadState[0].b = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_SPACE: currPadState[0].select = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_RETURN: currPadState[0].start = ev.type == SDL_EVENT_KEY_DOWN; break;
+            case SDL_SCANCODE_H: nes._cpu.setHook(CPU6502::HeatMapHook); break;
+            case SDL_SCANCODE_T: nes._cpu.setHook(CPU6502::TesterHook); break;
+            case SDL_SCANCODE_V: nes._cpu.setHook(CPU6502::VerboseTesterHook); break;
+            case SDL_SCANCODE_R: nes._cpu.setHook({}); break;
             case SDL_SCANCODE_F1: CPU6502::SetHeatMapReportThreshold(1); break;
             case SDL_SCANCODE_F2: CPU6502::SetHeatMapReportThreshold(10); break;
             case SDL_SCANCODE_F3: CPU6502::SetHeatMapReportThreshold(100); break;
@@ -244,28 +298,35 @@ int main(int argc, char* argv[]) {
           }
         } break;
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
-          if (ev.gbutton.button == SDL_GAMEPAD_BUTTON_NORTH) nes.cpu.reset();
+          if (ev.gbutton.button == SDL_GAMEPAD_BUTTON_NORTH) nes._cpu.reset();
         } /* Intentional fallthrough */
         case SDL_EVENT_GAMEPAD_BUTTON_UP: {
           switch (ev.gbutton.button) {
-            case SDL_GAMEPAD_BUTTON_DPAD_LEFT: nes.padBtns[0].left = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: nes.padBtns[0].right = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            case SDL_GAMEPAD_BUTTON_DPAD_UP: nes.padBtns[0].up = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            case SDL_GAMEPAD_BUTTON_DPAD_DOWN: nes.padBtns[0].down = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            case SDL_GAMEPAD_BUTTON_SOUTH: nes.padBtns[0].a = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            case SDL_GAMEPAD_BUTTON_EAST: nes.padBtns[0].b = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            case SDL_GAMEPAD_BUTTON_BACK: nes.padBtns[0].select = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
-            case SDL_GAMEPAD_BUTTON_START: nes.padBtns[0].start = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_DPAD_LEFT: currPadState[0].left = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: currPadState[0].right = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_DPAD_UP: currPadState[0].up = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_DPAD_DOWN: currPadState[0].down = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_SOUTH: currPadState[0].a = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_EAST: currPadState[0].b = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_BACK: currPadState[0].select = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
+            case SDL_GAMEPAD_BUTTON_START: currPadState[0].start = ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN; break;
           }
         } break;
       }
     }
 
-    auto frame = nes.ppu.getFrame();
-    SDL_UpdateTexture(tex, nullptr, frame.data(), 256 * 4);
-    SDL_RenderClear(rend);
-    SDL_RenderTexture(rend, tex, nullptr, nullptr);
-    SDL_RenderPresent(rend);
+    {
+      auto const lock = nes.tryLock();
+
+      if (lock.owns_lock()) nes._padBtns = currPadState;
+      if (auto frame = nes.step(lock, delta); !frame.empty()) {
+        SDL_UpdateTexture(tex, nullptr, frame.data(), 256 * 4);
+        SDL_RenderClear(rend);
+        SDL_RenderTexture(rend, tex, nullptr, nullptr);
+        SDL_RenderPresent(rend);
+        nes._wait.notify_one();
+      }
+    }
 
     lastTime = currentTime;
   }
@@ -276,7 +337,7 @@ int main(int argc, char* argv[]) {
   SDL_Quit();
 #else
   while (true)
-    nes.step();
+    nes.step(nes.tryLock(), Console::TARGET_FRAMETIME);
 #endif
 
   return 0;

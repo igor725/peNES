@@ -292,7 +292,7 @@ class CPU6502: public MMU {
   }
 
   inline std::pair<uint8_t, uint16_t> _evalIndexedXIndir(InstructionStatus const& status) {
-    return {3, (readRamByte(static_cast<uint8_t>((status.operand.u8 + m_regs.X) + 1)) << 8) | readRamByte(static_cast<uint8_t>(status.operand.u8 + m_regs.X))};
+    return {3, (readMemByte(static_cast<uint8_t>((status.operand.u8 + m_regs.X) + 1)) << 8) | readMemByte(static_cast<uint8_t>(status.operand.u8 + m_regs.X))};
   }
 
   inline std::pair<uint8_t, uint16_t> _evalAbsolute(InstructionStatus const& status) { return {1, status.operand.u16}; }
@@ -308,7 +308,7 @@ class CPU6502: public MMU {
   }
 
   inline std::pair<uint8_t, uint16_t> _evalIndirIndexedY(InstructionStatus const& status) {
-    uint16_t const base   = (readRamByte((status.operand.u8 + 1) & 0xFF) << 8) | readRamByte(status.operand.u8);
+    uint16_t const base   = (readMemByte((status.operand.u8 + 1) & 0xFF) << 8) | readMemByte(status.operand.u8);
     uint16_t const target = base + m_regs.Y;
     return {_isPageCrossTaxed(status) && _isPageCrossed(base, target) ? 3 : 2, target};
   }
@@ -344,13 +344,13 @@ class CPU6502: public MMU {
       case AddrMode::Immediate: return {0, 0, static_cast<T>(status.operand.u8)};
       case AddrMode::Indirect: {
         uint16_t const high = (status.operand.u16 & 0xFF00) | static_cast<uint8_t>((status.operand.u16 & 0xFF) + 1);
-        return {4, status.operand.u16, (readRamByte(high) << 8) | readRamByte(status.operand.u16)};
+        return {4, status.operand.u16, (readMemByte(high) << 8) | readMemByte(status.operand.u16)};
       } break;
       default: break;
     }
 
     auto const [cycles, addr] = evaluateOperandToAddr(status);
-    return {cycles + sizeof(T), addr, readRam<T>(addr)};
+    return {cycles + sizeof(T), addr, readMem<T>(addr)};
   }
 
   static void VerboseTesterHook(InstructionStatus& status);
@@ -369,14 +369,14 @@ class CPU6502: public MMU {
   void setHook(CPUHook&& hook) { m_hook = std::move(hook); }
 
   template <typename T>
-  T readRam(uint16_t addr) const {
+  T readMem(uint16_t addr) const {
     static_assert(std::is_integral_v<T> && sizeof(T) <= 2);
 
     if constexpr (sizeof(T) == 1) {
-      return static_cast<T>(readRamByte(addr));
+      return static_cast<T>(readMemByte(addr));
     } else if constexpr (sizeof(T) == 2) {
       if (addr == 0xFFFF) throw;
-      return static_cast<T>((readRamByte(addr + 1) << 8) | readRamByte(addr));
+      return static_cast<T>((readMemByte(addr + 1) << 8) | readMemByte(addr));
     }
   }
 
@@ -384,7 +384,7 @@ class CPU6502: public MMU {
   T readPC() {
     auto orig = m_regs.PC;
     m_regs.PC += sizeof(T);
-    return readRam<T>(orig);
+    return readMem<T>(orig);
   }
 
   protected:
@@ -392,8 +392,8 @@ class CPU6502: public MMU {
   uint8_t handleMath(InstructionStatus& status);
   uint8_t handleShift(InstructionStatus& status);
   uint8_t handleIllegal(InstructionStatus& status);
-  uint8_t writeRamByte(uint16_t addr, uint8_t value);
-  uint8_t readRamByte(uint16_t addr) const;
+  uint8_t writeMemByte(uint16_t addr, uint8_t value);
+  uint8_t readMemByte(uint16_t addr) const;
   void    preExecHook(InstructionStatus& status);
   uint8_t postExecHook(InstructionStatus& status, uint8_t cycles);
   uint8_t interrupt(uint16_t vector, bool software = false);

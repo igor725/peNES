@@ -180,11 +180,61 @@ void APU::NoiseChannel::operation(uint8_t opCode, uint8_t value) {
   }
 }
 
-void APU::DeltaModChannel::step() {}
+void APU::DeltaModChannel::step(CPU6502& cpu) {
+  if (_bufferEmpty && _currentLength > 0) {
+    _sampleBuffer = cpu.readMem<uint8_t>(_currentAddress);
+    _bufferEmpty  = false;
+
+    if (_currentAddress == 0xFFFF) {
+      _currentAddress = 0x8000;
+    } else {
+      _currentAddress++;
+    }
+
+    _currentLength--;
+    if (_currentLength == 0) {
+      if (_looping) {
+        _currentAddress = _sampleAddress;
+        _currentLength  = _sampleLength;
+      } else if (_irqEnable) {
+        _irqTriggered = true;
+        cpu.triggerIRQ();
+      }
+    }
+  }
+
+  if (_timerCounter == 0) {
+    _timerCounter = _frequency;
+
+    if (!_silenceFlag) {
+      if (_shiftRegister & 0b1) {
+        if (_outputLevel <= 125) _outputLevel += 2;
+      } else {
+        if (_outputLevel >= 2) _outputLevel -= 2;
+      }
+    }
+
+    _shiftRegister >>= 1;
+
+    _bitsRemaining--;
+    if (_bitsRemaining == 0) {
+      _bitsRemaining = 8;
+
+      if (_bufferEmpty) {
+        _silenceFlag = true;
+      } else {
+        _silenceFlag   = false;
+        _shiftRegister = _sampleBuffer;
+        _bufferEmpty   = true;
+      }
+    }
+  } else {
+    _timerCounter--;
+  }
+}
 
 uint8_t APU::DeltaModChannel::output() const {
-  if (!_enabled) return 0;
-  return 0;
+  return _outputLevel;
 }
 
 void APU::DeltaModChannel::operation(uint8_t opCode, uint8_t value) {
@@ -236,7 +286,15 @@ bool APU::handleWrite(uint16_t addr, uint8_t value) {
     if ((m_pulse[1]._enabled = value & 0b00000010) == 0) m_pulse[1]._length = 0;
     if ((m_triangle._enabled = value & 0b00000100) == 0) m_triangle._length = 0;
     if ((m_noise._enabled = value & 0b00001000) == 0) m_noise._length = 0;
-    if ((m_dmc._enabled = value & 0b00010000) == 0) m_dmc._sampleLength = 0;
+    if ((m_dmc._enabled = value & 0b00010000) == 0) {
+      m_dmc._currentLength = 0;
+    } else {
+      if (m_dmc._currentLength == 0) {
+        m_dmc._currentAddress = m_dmc._sampleAddress;
+        m_dmc._currentLength  = m_dmc._sampleLength;
+      }
+    }
+    m_dmc._irqTriggered = false;
     return true;
   } else if (addr == 0x4017) /* Frame Counter */ {
     m_5stepSequence = (value & 0b10000000) > 0;
@@ -279,7 +337,7 @@ void APU::step(uint8_t cycles) {
       m_noise.step();
     }
     m_triangle.step();
-    m_dmc.step();
+    m_dmc.step(m_cpu);
 
     if ((m_cycles++ % (CPU6502::BASE_CLOCK_FREQUENCY / BASE_FCNT_FREQUENCY)) == 0) {
       const auto envelope = [&]() {
@@ -317,11 +375,12 @@ void APU::step(uint8_t cycles) {
 
       m_sampleAccumulator += currSample;
       m_sampleCount += 1;
-      if ((m_cycleAccumulator += 1.0) >= CYCLES_PER_SAMPLE) {
+
+      if ((m_cycleAccumulator += 1.0) >= m_cyclesPerSample) {
         m_handler(m_sampleAccumulator / m_sampleCount);
         m_sampleAccumulator = 0.0f;
         m_sampleCount       = 0;
-        m_cycleAccumulator -= CYCLES_PER_SAMPLE;
+        m_cycleAccumulator -= m_cyclesPerSample;
       }
     }
   }

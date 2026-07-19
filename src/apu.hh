@@ -8,7 +8,7 @@
 #include <optional>
 
 class APU {
-  static constexpr double   CYCLES_PER_SAMPLE   = 37.2869375;
+  static constexpr double   BASE_APU_FREQUENCY  = 1789773.0;
   static constexpr uint32_t BASE_FCNT_FREQUENCY = 240;
 
   struct PulseChannel {
@@ -86,12 +86,22 @@ class APU {
     bool     _irqEnable     = false;
     bool     _looping       = false;
     bool     _irqTriggered  = false;
+    bool     _bufferEmpty   = true;
+    bool     _silenceFlag   = true;
     uint16_t _frequency     = 0;
-    uint8_t  _outputLevel   = 0;
     uint16_t _sampleLength  = 0;
     uint16_t _sampleAddress = 0;
 
-    void    step();
+    uint16_t _timerCounter   = 0;
+    uint16_t _currentAddress = 0;
+    uint16_t _currentLength  = 0;
+
+    uint8_t _outputLevel   = 0;
+    uint8_t _shiftRegister = 0;
+    uint8_t _bitsRemaining = 8;
+    uint8_t _sampleBuffer  = 0;
+
+    void    step(CPU6502& cpu);
     uint8_t output() const;
     void    operation(uint8_t opCode, uint8_t value);
     void    advanceLength();
@@ -108,6 +118,8 @@ class APU {
   bool handleWrite(uint16_t addr, uint8_t value);
 
   void setEnabled(bool state) { m_outEnabled = state; }
+
+  void setSamplingRate(double value) { m_cyclesPerSample = BASE_APU_FREQUENCY / value; }
 
   void step(uint8_t cycles);
 
@@ -126,6 +138,7 @@ class APU {
   uint8_t  m_step          = 0;
   uint16_t m_cycles        = 0;
 
+  double   m_cyclesPerSample   = 0.0;
   double   m_cycleAccumulator  = 0.0;
   float    m_sampleAccumulator = 0.0f;
   uint32_t m_sampleCount       = 0;

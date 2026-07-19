@@ -98,7 +98,7 @@ uint8_t PPU::dmaWrite(uint8_t value) {
   uint16_t cpuPageAddress = static_cast<uint16_t>(value) << 8;
 
   for (uint32_t i = 0; i < 256; i++) {
-    m_oam[(m_oamAddr + i) & 0xFF] = m_cpu.readRam<uint8_t>(cpuPageAddress + i);
+    m_oam[(m_oamAddr + i) & 0xFF] = m_cpu.readMem<uint8_t>(cpuPageAddress + i);
   }
 
   return 0;
