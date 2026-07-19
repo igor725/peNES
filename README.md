@@ -10,7 +10,11 @@ The initial plan was to get it going within one day which I did successfully. Th
 > since I was adding them on as games were executing them. All the official instructions are already implemented, but illegal ones are still big TODO.
 
 ## Screenshots
-[<img src="./screenshots/scr1.png">](./screenshots/scr1.png)
+<details>
+  <summary>Click to expand</summary>
+	[<img src="./screenshots/scr1.png">](./screenshots/scr1.png)
+	[<img src="./screenshots/scr2.png">](./screenshots/scr2.png)
+</details>
 
 ## Implemented mappers
 - [x] MMC0
@@ -23,7 +27,11 @@ The initial plan was to get it going within one day which I did successfully. Th
 Currently any attempt to run other mappers will result in exception.
 
 ## Usage
-Just compile and run the executable with the `*.nes` file passed as first argument.
+Just compile and run the executable with the `*.nes` file passed as argument.
+
+### Supported arguments
+* `--volume [0...1]` - Set the master volume for the emulator, defaults to `0.3`
+* `--hook [string]` - Set one of built-in CPU hooks, defaults to `null`. Possible values: `verbosetest`, `heatmap`, `test`, `used`. For details see [cpuhooks.cpp](./src/cpuhooks.cpp)
 
 Currently the emulator supports only Unix-like systems, it was tested on Arch Linux only so far.
 
@@ -35,13 +43,9 @@ Keyboard bindings:
 * Arrows - Navigate
 * Z/X - Action buttons
 * Space/Enter - Select/Start options buttons
-* V - Apply verbose hook
-* T - Apply tester hook (validate CPU hook call sequence)
-* H - Apply heatmap hook
 * F1 - Set heatmap printing threshold to 1
 * F2 - Set heatmap printing threshold to 10
 * F3 - Set heatmap printing threshold to 100
-* R - Unset installed hook
 
 ## Dependencies
 * SDL3 (optional, headless run is possible)

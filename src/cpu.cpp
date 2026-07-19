@@ -1313,12 +1313,8 @@ void CPU6502::triggerIRQ() {
 }
 
 uint8_t CPU6502::writeMemByte(uint16_t addr, uint8_t value) {
-  if (addr <= 0x1FFF) {
-    addr &= 0x7ff;
-    return m_ram.at(addr) = value;
-  }
+  if (addr <= 0x1FFF) return m_ram.at(addr & 0x7ff) = value;
 
-  m_bus = value;
   if (auto handler = findHandler(addr); isValidHandler(handler)) {
     if (auto ret = handler->second(true, addr, value); ret.has_value()) return ret.value();
   }
@@ -1327,16 +1323,13 @@ uint8_t CPU6502::writeMemByte(uint16_t addr, uint8_t value) {
 }
 
 uint8_t CPU6502::readMemByte(uint16_t addr) const {
-  if (addr <= 0x1FFF) {
-    addr &= 0x7ff;
-    return m_ram.at(addr);
-  }
+  if (addr <= 0x1FFF) return m_ram.at(addr & 0x7ff);
 
   if (auto handler = findHandler(addr); isValidHandler(handler)) {
-    if (auto ret = handler->second(false, addr, 0); ret.has_value()) return m_bus = ret.value();
+    if (auto ret = handler->second(false, addr, 0); ret.has_value()) return ret.value();
   }
 
-  return m_bus = (addr >> 8); // 100thCoin's accuracy test 2. Not sure if I want to get any further into this open bus rabbit hole
+  return (addr >> 8); // 100thCoin's accuracy test 2. Not sure if I want to get any further into this open bus rabbit hole
 }
 
 void CPU6502::preExecHook(InstructionStatus& status) {

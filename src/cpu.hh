@@ -407,10 +407,8 @@ class CPU6502: public MMU {
     bool m_intrClrSchd  : 1;
   };
 
-  mutable uint8_t m_bus = 0;
-
   uint8_t m_padding[6];
 
-  std::array<uint8_t, 0x0800> m_ram;
-  CPUHook                     m_hook;
+  std::array<uint8_t, 0x800> m_ram;
+  CPUHook                    m_hook;
 };

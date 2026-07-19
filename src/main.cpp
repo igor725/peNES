@@ -65,16 +65,18 @@ struct Console {
   std::condition_variable _wait;
   std::jthread            _thread;
 
-  Console(float volume): _ppu(_cpu), _apu(_cpu) {
+  Console(CmdlineParser const& cmdline): _ppu(_cpu), _apu(_cpu) {
 #ifndef PENES_NO_SDL
     SDL_AudioSpec spec;
 
-    if (SDL_GetAudioDeviceFormat(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr)) {
-      spec.channels = 1, spec.format = SDL_AUDIO_F32LE;
-      if ((_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr)) != nullptr) {
-        SDL_SetAudioStreamGain(_stream, volume);
-        SDL_ResumeAudioStreamDevice(_stream);
-        _apu.setSamplingRate(spec.freq);
+    if (auto const volume = cmdline.getNamedArg<"volume">(0.3).value(); volume > 0.0) {
+      if (SDL_GetAudioDeviceFormat(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr)) {
+        spec.channels = 1, spec.format = SDL_AUDIO_F32LE;
+        if ((_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr)) != nullptr) {
+          SDL_SetAudioStreamGain(_stream, volume);
+          SDL_ResumeAudioStreamDevice(_stream);
+          _apu.setSamplingRate(spec.freq);
+        }
       }
     }
 
@@ -119,6 +121,19 @@ struct Console {
         }
       }
     });
+
+    if (auto hook = cmdline.getNamedArg<"hook">()) {
+      if (hook == "test")
+        _cpu.setHook(CPU6502::TesterHook);
+      else if (hook == "verbosetest")
+        _cpu.setHook(CPU6502::VerboseTesterHook);
+      else if (hook == "heatmap")
+        _cpu.setHook(CPU6502::HeatMapHook);
+      else if (hook == "verbosetest")
+        _cpu.setHook(CPU6502::VerboseTesterHook);
+      else if (hook == "used")
+        _cpu.setHook(CPU6502::UsedInstructionsHook);
+    }
   }
 
   ~Console() {
@@ -240,7 +255,7 @@ int32_t main(int32_t argc, char* argv[]) {
     return 5;
   }
 
-  Console nes(args.getNamedArg<"volume">(0.3).value());
+  Console nes(args);
 
   try {
     nes.put(nesRom.value());
@@ -286,10 +301,6 @@ int32_t main(int32_t argc, char* argv[]) {
             case SDL_SCANCODE_Z: currPadState[0].b = ev.type == SDL_EVENT_KEY_DOWN; break;
             case SDL_SCANCODE_SPACE: currPadState[0].select = ev.type == SDL_EVENT_KEY_DOWN; break;
             case SDL_SCANCODE_RETURN: currPadState[0].start = ev.type == SDL_EVENT_KEY_DOWN; break;
-            case SDL_SCANCODE_H: nes._cpu.setHook(CPU6502::HeatMapHook); break;
-            case SDL_SCANCODE_T: nes._cpu.setHook(CPU6502::TesterHook); break;
-            case SDL_SCANCODE_V: nes._cpu.setHook(CPU6502::VerboseTesterHook); break;
-            case SDL_SCANCODE_R: nes._cpu.setHook({}); break;
             case SDL_SCANCODE_F1: CPU6502::SetHeatMapReportThreshold(1); break;
             case SDL_SCANCODE_F2: CPU6502::SetHeatMapReportThreshold(10); break;
             case SDL_SCANCODE_F3: CPU6502::SetHeatMapReportThreshold(100); break;

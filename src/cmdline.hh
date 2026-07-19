@@ -56,7 +56,9 @@ class CmdlineParser {
   static constexpr ArgType getExpectedType(size_t hash) {
     switch (hash) {
       case HASH_STR("volume"): return ArgType::Double;
-      default: return ArgType::String;
+      case HASH_STR("hook"): return ArgType::String;
+      case HASH_STR("hmthreshold"): return ArgType::Int;
+      default: throw;
     }
   }
 
@@ -136,6 +138,6 @@ class CmdlineParser {
   }
 
   private:
-  std::map<uint64_t, ArgVariant> m_list;
-  std::vector<std::string>       m_seq;
+  std::map<size_t, ArgVariant> m_list;
+  std::vector<std::string>     m_seq;
 };
