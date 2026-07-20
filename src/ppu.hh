@@ -21,6 +21,18 @@ class PPU: public MMU {
   }};
 
   public:
+  template <typename P>
+  struct Frame {
+    std::span<P const> pixels;
+    uint32_t           pitch;
+
+    bool empty() const { return pixels.empty() || pitch == 0; }
+
+    auto data() const { return pixels.data(); }
+
+    auto pitch_bytes() const { return pitch * sizeof(P); }
+  };
+
   enum class RegionMode : uint8_t { NTSC = 0, PAL = 1, Dendy = 2 };
 
   PPU(CPU6502& c);
@@ -30,8 +42,8 @@ class PPU: public MMU {
   std::optional<uint8_t> cpuWrite(uint16_t addr, uint8_t value);
   uint8_t                dmaWrite(uint8_t value);
 
-  void                      run(uint8_t cycles);
-  std::span<uint32_t const> getFrame();
+  void            run(uint8_t cycles);
+  Frame<uint32_t> getFrame();
 
   bool isFrameReady() const { return m_frameReady; };
 
@@ -49,29 +61,30 @@ class PPU: public MMU {
   void     step();
 
   private:
-  static constexpr uint8_t CTRL_NAMETAB_SELECT    = 0x03;
-  static constexpr uint8_t CTRL_VRAM_INCREMENT    = 0x04;
-  static constexpr uint8_t CTRL_SPR_TAB_ADDR      = 0x08;
-  static constexpr uint8_t CTRL_BG_TAB_ADDR       = 0x10;
-  static constexpr uint8_t CTRL_TALL_SPRITE       = 0x20;
-  static constexpr uint8_t CTRL_MASTER_SELECT     = 0x40;
-  static constexpr uint8_t CTRL_GEN_NMI           = 0x80;
-  static constexpr uint8_t STATUS_OPEN_BUS        = 0x0F;
-  static constexpr uint8_t STATUS_SPRITE_OVERFLOW = 0x20;
-  static constexpr uint8_t STATUS_SPRITE_ZERO_HIT = 0x40;
-  static constexpr uint8_t STATUS_VBLANK          = 0x80;
-  static constexpr uint8_t MASK_GREYSCALE         = 0x01;
-  static constexpr uint8_t MASK_BG_LC_CLIP        = 0x02;
-  static constexpr uint8_t MASK_SPRITE_LC_CLIP    = 0x04;
-  static constexpr uint8_t MASK_DRAW_BG           = 0x08;
-  static constexpr uint8_t MASK_DRAW_SPRITE       = 0x10;
-  static constexpr uint8_t MASK_EMP_RED           = 0x20;
-  static constexpr uint8_t MASK_EMP_GREEN         = 0x40;
-  static constexpr uint8_t MASK_EMP_BLUE          = 0x80;
-  static constexpr uint8_t SPRITE_PALETTE         = 0x03;
-  static constexpr uint8_t SPRITE_PRIO            = 0x20;
-  static constexpr uint8_t SPRITE_FLIP_HORIZ      = 0x40;
-  static constexpr uint8_t SPRITE_FLIP_VERTI      = 0x80;
+  static constexpr uint16_t PPU_FRAMEBUFFER_PITCH  = 0x100;
+  static constexpr uint8_t  CTRL_NAMETAB_SELECT    = 0x03;
+  static constexpr uint8_t  CTRL_VRAM_INCREMENT    = 0x04;
+  static constexpr uint8_t  CTRL_SPR_TAB_ADDR      = 0x08;
+  static constexpr uint8_t  CTRL_BG_TAB_ADDR       = 0x10;
+  static constexpr uint8_t  CTRL_TALL_SPRITE       = 0x20;
+  static constexpr uint8_t  CTRL_MASTER_SELECT     = 0x40;
+  static constexpr uint8_t  CTRL_GEN_NMI           = 0x80;
+  static constexpr uint8_t  STATUS_OPEN_BUS        = 0x0F;
+  static constexpr uint8_t  STATUS_SPRITE_OVERFLOW = 0x20;
+  static constexpr uint8_t  STATUS_SPRITE_ZERO_HIT = 0x40;
+  static constexpr uint8_t  STATUS_VBLANK          = 0x80;
+  static constexpr uint8_t  MASK_GREYSCALE         = 0x01;
+  static constexpr uint8_t  MASK_BG_LC_CLIP        = 0x02;
+  static constexpr uint8_t  MASK_SPRITE_LC_CLIP    = 0x04;
+  static constexpr uint8_t  MASK_DRAW_BG           = 0x08;
+  static constexpr uint8_t  MASK_DRAW_SPRITE       = 0x10;
+  static constexpr uint8_t  MASK_EMP_RED           = 0x20;
+  static constexpr uint8_t  MASK_EMP_GREEN         = 0x40;
+  static constexpr uint8_t  MASK_EMP_BLUE          = 0x80;
+  static constexpr uint8_t  SPRITE_PALETTE         = 0x03;
+  static constexpr uint8_t  SPRITE_PRIO            = 0x20;
+  static constexpr uint8_t  SPRITE_FLIP_HORIZ      = 0x40;
+  static constexpr uint8_t  SPRITE_FLIP_VERTI      = 0x80;
 
   CPU6502& m_cpu;
 

@@ -3,6 +3,7 @@
 #include <charconv>
 #include <cstdint>
 #include <exception>
+#include <iterator>
 #include <map>
 #include <optional>
 #include <string>

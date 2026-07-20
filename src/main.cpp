@@ -110,7 +110,7 @@ struct Console {
             _ticks     = 0;
           }
 
-          if (auto timeElapsed = currentTime - lastTime; timeElapsed < TARGET_FRAMETIME) {
+          if (auto const timeElapsed = currentTime - lastTime; timeElapsed < TARGET_FRAMETIME) {
             std::this_thread::sleep_for(TARGET_FRAMETIME - timeElapsed);
           }
 
@@ -217,7 +217,7 @@ struct Console {
     _cpu.reset();
   }
 
-  std::span<uint32_t const> step(std::unique_lock<std::mutex> const& lock, Delta time) {
+  PPU::Frame<uint32_t> step(std::unique_lock<std::mutex> const& lock, Delta time) {
     _cyclesDebt += CPU6502::BASE_CLOCK_FREQUENCY * time.count();
     if (!lock.owns_lock() || !_ppu.isFrameReady()) return {};
     return _ppu.getFrame();
@@ -350,7 +350,7 @@ int32_t main(int32_t argc, char* argv[]) {
 
       if (lock.owns_lock()) nes._padBtns = currPadState;
       if (auto frame = nes.step(lock, delta); !frame.empty()) {
-        SDL_UpdateTexture(tex, nullptr, frame.data(), 256 * 4);
+        SDL_UpdateTexture(tex, nullptr, frame.data(), frame.pitch_bytes());
         SDL_RenderClear(rend);
         SDL_RenderTexture(rend, tex, nullptr, nullptr);
         SDL_RenderPresent(rend);

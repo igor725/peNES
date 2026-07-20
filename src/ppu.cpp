@@ -210,7 +210,8 @@ void PPU::step() {
             }
           }
 
-          m_frameBuffer[(m_scanline * 256) + m_cycle] = m_colorPalette[readInternal(0x3F00 + (renderColor ? palette | renderColor : 0)) & 0x3F];
+          m_frameBuffer[(m_scanline * PPU_FRAMEBUFFER_PITCH) + m_cycle] =
+              m_colorPalette[readInternal(0x3F00 + (renderColor ? palette | renderColor : 0)) & 0x3F];
         }
 
         if (m_cycle < 336) {
@@ -243,7 +244,7 @@ void PPU::step() {
         }
       }
 
-      if (m_cycle == 256) {
+      if (m_cycle == PPU_FRAMEBUFFER_PITCH) {
         if ((m_vramAddr & 0x7000) != 0x7000) {
           m_vramAddr = m_vramAddr + 0x1000;
         } else if ((m_vramAddr & 0x3E0) == 0x3A0) {
@@ -283,9 +284,9 @@ void PPU::run(uint8_t cycles) {
   }
 }
 
-std::span<uint32_t const> PPU::getFrame() {
+PPU::Frame<uint32_t> PPU::getFrame() {
   m_frameReady = false;
-  return m_frameBuffer;
+  return {m_frameBuffer, PPU_FRAMEBUFFER_PITCH};
 }
 
 std::span<uint8_t> PPU::prepareCHRMemory() {
