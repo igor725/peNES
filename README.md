@@ -12,8 +12,8 @@ The initial plan was to get it going within one day which I did successfully. Th
 ## Screenshots
 <details>
   <summary>Click to expand</summary>
-	[<img src="./screenshots/scr1.png">](./screenshots/scr1.png)
-	[<img src="./screenshots/scr2.png">](./screenshots/scr2.png)
+	<img src="./screenshots/scr1.png">
+	<img src="./screenshots/scr2.png">
 </details>
 
 ## Implemented mappers
