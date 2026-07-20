@@ -351,12 +351,13 @@ int32_t main(int32_t argc, char* argv[]) {
       if (lock.owns_lock()) nes._padBtns = currPadState;
       if (auto frame = nes.step(lock, delta); !frame.empty()) {
         SDL_UpdateTexture(tex, nullptr, frame.data(), frame.pitch_bytes());
-        SDL_RenderClear(rend);
-        SDL_RenderTexture(rend, tex, nullptr, nullptr);
-        SDL_RenderPresent(rend);
         nes._wait.notify_one();
       }
     }
+
+    SDL_RenderClear(rend);
+    SDL_RenderTexture(rend, tex, nullptr, nullptr);
+    SDL_RenderPresent(rend);
 
     lastTime = currentTime;
   }
