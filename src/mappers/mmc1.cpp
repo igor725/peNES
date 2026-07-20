@@ -59,7 +59,7 @@ class MMC1: public Mapper {
       return (*m_cartridge)->data[m_progBaseOff + m_prgOff1 + (addr & 0x3FFF)];
     }
 
-    return 0;
+    throw;
   }
 
   std::optional<uint32_t> resolvePPU(uint16_t addr) const final {

@@ -8,7 +8,21 @@
 #include <span>
 
 class PPU: public MMU {
+  struct RegionTiming {
+    uint16_t vblankScanline;
+    uint16_t preRenderScanline;
+    uint16_t totalScanlines;
+  };
+
+  static constexpr std::array<RegionTiming, 3> REGION_TIMINGS = {{
+      {241, 261, 262}, // NTSC
+      {241, 311, 312}, // PAL
+      {291, 311, 312}  // Dendy
+  }};
+
   public:
+  enum class RegionMode : uint8_t { NTSC = 0, PAL = 1, Dendy = 2 };
+
   PPU(CPU6502& c);
   ~PPU();
 
@@ -20,6 +34,8 @@ class PPU: public MMU {
   std::span<uint32_t const> getFrame();
 
   bool isFrameReady() const { return m_frameReady; };
+
+  void setRegionMode(RegionMode rg) { m_timing = &REGION_TIMINGS[static_cast<uint8_t>(rg)]; }
 
   void setVerticalMirroring() { m_mirrorVertically = true; }
 
@@ -91,6 +107,8 @@ class PPU: public MMU {
   uint8_t  m_vram[2048];
   uint8_t  m_palette[32];
   uint8_t  m_oam[256];
+
+  RegionTiming const* m_timing = &REGION_TIMINGS[0];
 
   std::span<uint8_t> m_chrRam;
 };

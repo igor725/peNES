@@ -259,21 +259,21 @@ void PPU::step() {
       }
     }
 
-    if (m_scanline == 261 && m_cycle >= 280 && m_cycle <= 304) m_vramAddr = (m_vramAddr & 0x841F) | (m_tramAddr & 0x7BE0);
+    if (m_scanline == m_timing->preRenderScanline && m_cycle >= 280 && m_cycle <= 304) m_vramAddr = (m_vramAddr & 0x841F) | (m_tramAddr & 0x7BE0);
   }
 
   if (m_cycle == 1) {
-    if (m_scanline == 241) {
+    if (m_scanline == m_timing->vblankScanline) {
       m_regs.S |= STATUS_VBLANK;
       if (m_regs.C & CTRL_GEN_NMI) m_cpu.triggerNMI();
       m_frameReady = true;
     }
-    if (m_scanline == 261) m_regs.S = 0;
+    if (m_scanline == m_timing->preRenderScanline) m_regs.S = 0;
   }
 
-  if (++m_cycle == 341) {
+  if (++m_cycle >= 341) {
     m_cycle = 0, m_spritesPerScan = 0;
-    if (++m_scanline > 261) m_scanline = 0;
+    if (++m_scanline >= m_timing->totalScanlines) m_scanline = 0;
   }
 }
 
