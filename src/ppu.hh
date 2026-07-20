@@ -51,8 +51,6 @@ class PPU: public MMU {
 
   void setVerticalMirroring() { m_mirrorVertically = true; }
 
-  std::span<uint8_t> prepareCHRMemory();
-
   protected:
   uint16_t getNametableMirroringOffset(uint16_t address);
   void     writeInternal(uint16_t addr, uint8_t value);

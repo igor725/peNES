@@ -2,6 +2,7 @@
 #include "cmdline.hh"
 #include "cpu.hh"
 #include "ines.hh"
+#include "mappers/mapper.hh"
 #include "ppu.hh"
 
 #include <SDL3/SDL_audio.h>
@@ -139,9 +140,13 @@ struct Console {
     }
   }
 
-  ~Console() {
+  ~Console() { stop(); }
+
+  void stop() {
+    _sync.lock();
     _thread.request_stop();
     _wait.notify_one();
+    _sync.unlock();
   }
 
   auto tryLock() { return std::unique_lock(_sync, std::try_to_lock); }
@@ -196,16 +201,7 @@ struct Console {
 
     // PPU CHR handler
     _ppu.addRangeHandler({0x0000, 0x1FFF}, [&](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
-      auto const romAddr = _cartridge.getMapper()->resolvePPU(addr);
-      if (!romAddr.has_value()) /* No CHR data in cartridge */ {
-        auto const chrRam = _ppu.prepareCHRMemory();
-        if (isWrite) return chrRam[addr] = value;
-        return chrRam[addr];
-      }
-
-      // Skip all writes
-      if (!_cartridge.checkBounds(*romAddr)) throw;
-      return _cartridge->data[*romAddr];
+      return _cartridge.getMapper()->ppuOperation(isWrite, addr, value);
     });
 
 #ifndef PENES_NO_SDL
@@ -361,6 +357,7 @@ int32_t main(int32_t argc, char* argv[]) {
 
     lastTime = currentTime;
   }
+  nes.stop();
 
   SDL_DestroyTexture(tex);
   SDL_DestroyRenderer(rend);

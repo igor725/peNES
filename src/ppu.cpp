@@ -288,12 +288,3 @@ PPU::Frame<uint32_t> PPU::getFrame() {
   m_frameReady = false;
   return {m_frameBuffer, PPU_FRAMEBUFFER_PITCH};
 }
-
-std::span<uint8_t> PPU::prepareCHRMemory() {
-  if (m_chrRam.empty()) {
-    auto a   = new uint8_t[0x2000];
-    m_chrRam = {a, 0x2000};
-  }
-
-  return m_chrRam;
-}

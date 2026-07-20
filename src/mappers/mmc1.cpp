@@ -5,22 +5,14 @@
 #include <memory>
 
 class MMC1: public Mapper {
-  public:
-  MMC1(iNES* c): Mapper(c) {
-    m_progBaseOff = 0;
-    if ((*c)->hdr.flags.trainer) m_progBaseOff += iNES::TRAINER_BLOCK_SIZE;
+  static constexpr size_t PROG_BANK_SIZE = 0x4000;
+  static constexpr size_t CHAR_BANK_SIZE = 0x2000;
 
-    m_charBaseOff = m_progBaseOff + ((*c)->hdr.getProgNum() * iNES::PRG_BLOCK_SIZE);
-    m_ctlReg      = 0x0C;
-    updateOffsets();
-  }
+  public:
+  MMC1(iNES* c): Mapper(c, PROG_BANK_SIZE, CHAR_BANK_SIZE) { updateOffsets(); }
 
   uint8_t cpuOperation(bool isWrite, uint16_t addr, uint8_t value) final {
-    if (addr >= 0x6000 && addr <= 0x7FFF) { // Battery backed memory
-      addr -= 0x6000;
-      if (isWrite) return m_memory[addr] = value;
-      return m_memory[addr];
-    }
+    if (addr >= 0x6000 && addr <= 0x7FFF) return handleBattery(isWrite, addr & 0x1FFF, value);
 
     if (isWrite) {
       if (addr >= 0x8000) {
@@ -54,54 +46,50 @@ class MMC1: public Mapper {
     }
 
     if (addr >= 0x8000 && addr <= 0xBFFF) {
-      return (*m_cartridge)->data[m_progBaseOff + m_prgOff0 + (addr & 0x3FFF)];
+      return m_cartridge->data[m_progBaseOff + m_prgOff0 + (addr & 0x3FFF)];
     } else if (addr >= 0xC000 && addr <= 0xFFFF) {
-      return (*m_cartridge)->data[m_progBaseOff + m_prgOff1 + (addr & 0x3FFF)];
+      return m_cartridge->data[m_progBaseOff + m_prgOff1 + (addr & 0x3FFF)];
     }
 
     throw;
   }
 
-  std::optional<uint32_t> resolvePPU(uint16_t addr) const final {
-    if ((*m_cartridge)->hdr.getCharNum() == 0) return {};
-
-    if (addr <= 0x0FFF) {
-      return m_charBaseOff + m_chrOff0 + (addr & 0x0FFF);
-    } else if (addr >= 0x1000 && addr <= 0x1FFF) {
-      return m_charBaseOff + m_chrOff1 + (addr & 0x0FFF);
+  uint8_t ppuOperation(bool isWrite, uint16_t addr, uint8_t value) final {
+    if (m_cartridge->hdr.getCharNum() == 0) {
+      auto const chrRam = prepareCHRMemory(0x2000);
+      if (isWrite) return chrRam[addr & 0x1FFF] = value;
+      return chrRam[addr & 0x1FFF];
     }
 
-    return {};
+    if (isWrite) throw;
+    return m_cartridge->data[m_charBaseOff + m_chrOff[(addr >> 12) & 0x1] + (addr & 0x0FFF)];
   }
 
-  std::pair<uint16_t, uint16_t> getMappedRegion() const final { return {(*m_cartridge)->hdr.flags.battery ? 0x6000 : 0x8000, 0xFFFF}; }
+  std::pair<uint16_t, uint16_t> getMappedRegion() const final { return {m_cartridge->hdr.flags.battery ? 0x6000 : 0x8000, 0xFFFF}; }
 
   private:
-  uint32_t m_progBaseOff;
-  uint32_t m_charBaseOff;
-  uint8_t  m_shiftReg   = 0;
-  uint8_t  m_shiftCount = 0;
+  uint8_t m_shiftReg   = 0;
+  uint8_t m_shiftCount = 0;
 
   uint8_t m_ctlReg    = 0x0C;
   uint8_t m_charBank0 = 0;
   uint8_t m_charBank1 = 0;
   uint8_t m_prgBank   = 0;
 
-  uint32_t m_prgOff0 = 0;
-  uint32_t m_prgOff1 = 0;
-  uint32_t m_chrOff0 = 0x0000;
-  uint32_t m_chrOff1 = 0x1000;
+  uint32_t                m_prgOff0 = 0;
+  uint32_t                m_prgOff1 = 0;
+  std::array<uint32_t, 2> m_chrOff  = {0x0000, 0x1000};
 
   uint8_t m_memory[8192];
 
   void updateOffsets() {
     if (((m_ctlReg >> 4) & 0x01) /* chrMode */ == 0) {
       uint8_t bank = m_charBank0 & 0xFE;
-      m_chrOff0    = bank * 0x1000;
-      m_chrOff1    = (bank + 1) * 0x1000;
+      m_chrOff[0]  = bank * 0x1000;
+      m_chrOff[1]  = (bank + 1) * 0x1000;
     } else {
-      m_chrOff0 = m_charBank0 * 0x1000;
-      m_chrOff1 = m_charBank1 * 0x1000;
+      m_chrOff[0] = m_charBank0 * 0x1000;
+      m_chrOff[1] = m_charBank1 * 0x1000;
     }
 
     uint8_t currBank = m_prgBank & 0x0F;
@@ -118,7 +106,7 @@ class MMC1: public Mapper {
       } break;
       case 0x03: {
         m_prgOff0 = currBank * 0x4000;
-        m_prgOff1 = ((*m_cartridge)->hdr.getProgNum() - 1) * 0x4000;
+        m_prgOff1 = (m_cartridge->hdr.getProgNum() - 1) * 0x4000;
       } break;
     }
   }

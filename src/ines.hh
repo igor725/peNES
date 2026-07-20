@@ -1,13 +1,13 @@
 #pragma once
 
-#include "mappers/mapper.hh"
-
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <exception>
 #include <filesystem>
 #include <string>
+
+class Mapper;
 
 class CartridgeException: public std::exception {
   std::string m_what;
@@ -98,17 +98,13 @@ class iNES {
         return std::max(flagsEx.nes1.prgRamSize, (uint8_t)1) * 8192;
       }
 
-      inline uint32_t getEstFileSize() const {
-        return sizeof(Header) + (getProgNum() * PRG_BLOCK_SIZE) + (getCharNum() * CHR_BLOCK_SIZE) + (flags.trainer * TRAINER_BLOCK_SIZE);
-      }
-
       inline uint16_t getMapperId() const { return (isNes2() ? flagsEx.nes2.mapperHighest << 8 : 0) | (flags.mapperHigh << 4) | flags.mapperLow; }
 
       inline Region getRegion() const { return isNes2() ? flagsEx.nes2.region : (flagsEx.nes1.flipMode ? Region::PAL : Region::NTSC); }
 
       inline bool validate(size_t fsize) const {
         if (!(magic[0] == 'N' && magic[1] == 'E' && magic[2] == 'S' && magic[3] == '\x1a')) return false; // Check header
-        if (getProgNum() == 0 || fsize < getEstFileSize()) return false;
+        if (getProgNum() == 0) return false;
         if (isNes2()) {
           if (flagsEx.nes2.progNvramShifts != 0 && flags.battery == 0) return false;
           // TODO more validity checks?
@@ -125,8 +121,6 @@ class iNES {
   static_assert(sizeof(File::Header) == 16);
 
   public:
-  static constexpr size_t PRG_BLOCK_SIZE     = 16384;
-  static constexpr size_t CHR_BLOCK_SIZE     = 8192;
   static constexpr size_t TRAINER_BLOCK_SIZE = 512;
 
   iNES() = default;
@@ -143,6 +137,8 @@ class iNES {
   bool checkBounds(uint32_t addr) const { return addr < m_size; }
 
   void disableValidation() { m_validation = false; }
+
+  size_t getFileSize() const { return m_size; }
 
   uint32_t resolveCPU(uint16_t addr) const;
 
