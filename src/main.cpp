@@ -66,6 +66,9 @@ struct Console {
   std::jthread            _thread;
 
   Console(CmdlineParser const& cmdline): _ppu(_cpu), _apu(_cpu) {
+    if (auto skipNesValid = cmdline.getNamedArg<"skipvalid">(false)) {
+      if (skipNesValid.value()) _cartridge.disableValidation();
+    }
 #ifndef PENES_NO_SDL
     SDL_AudioSpec spec;
 
@@ -210,7 +213,7 @@ struct Console {
     _apu.onData([&](float sample) { SDL_PutAudioStreamData(_stream, &sample, 4); });
 #endif
 
-    if (_cartridge->isVerticalMirror()) _ppu.setVerticalMirroring();
+    if (_cartridge->hdr.isVerticalMirror()) _ppu.setVerticalMirroring();
     _cpu.reset();
   }
 
@@ -222,28 +225,35 @@ struct Console {
 };
 
 int32_t main(int32_t argc, char* argv[]) {
-  CmdlineParser args(argc, argv);
+  CmdlineParser args;
+
+  try {
+    args.parse(argc, argv);
+  } catch (UnknownCmdlineParameter const& ex) {
+    std::cerr << "Unknown command line parameter specified" << std::endl;
+    return 1;
+  }
 
 #ifndef PENES_NO_SDL
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_AUDIO)) {
     std::cerr << "Failed to initialize SDL: " << SDL_GetError() << std::endl;
-    return 1;
+    return 2;
   }
 
   auto window = SDL_CreateWindow("peNES", 800, 600, SDL_WINDOW_RESIZABLE);
   if (window == nullptr) {
     std::cerr << "Failed to create a window" << SDL_GetError() << std::endl;
-    return 2;
+    return 3;
   }
   auto rend = SDL_CreateRenderer(window, nullptr);
   if (rend == nullptr) {
     std::cerr << "Failed to create a renderer" << SDL_GetError() << std::endl;
-    return 3;
+    return 4;
   }
   auto tex = SDL_CreateTexture(rend, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 256, 240);
   if (tex == nullptr) {
     std::cerr << "Failed to create a texture" << SDL_GetError() << std::endl;
-    return 4;
+    return 5;
   }
   SDL_SetRenderVSync(rend, 1);
 #endif
@@ -252,7 +262,7 @@ int32_t main(int32_t argc, char* argv[]) {
 
   if (!nesRom.has_value()) {
     std::cerr << "Usage: " << argv[0] << " </path/to/application.nes>" << std::endl;
-    return 5;
+    return 6;
   }
 
   Console nes(args);
@@ -261,7 +271,7 @@ int32_t main(int32_t argc, char* argv[]) {
     nes.put(nesRom.value());
   } catch (CartridgeException const& ex) {
     std::cerr << "Failed to load specified cartridge file: " << ex.what() << std::endl;
-    return 6;
+    return 7;
   }
 
 #ifndef PENES_NO_SDL

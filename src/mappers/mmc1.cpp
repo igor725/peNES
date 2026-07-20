@@ -8,9 +8,9 @@ class MMC1: public Mapper {
   public:
   MMC1(iNES* c): Mapper(c) {
     m_progBaseOff = 0;
-    if ((*c)->hdr.flags6.trainer) m_progBaseOff += iNES::TRAINER_BLOCK_SIZE;
+    if ((*c)->hdr.flags.trainer) m_progBaseOff += iNES::TRAINER_BLOCK_SIZE;
 
-    m_charBaseOff = m_progBaseOff + ((*c)->hdr.progSize * iNES::PRG_BLOCK_SIZE);
+    m_charBaseOff = m_progBaseOff + ((*c)->hdr.getProgNum() * iNES::PRG_BLOCK_SIZE);
     m_ctlReg      = 0x0C;
     updateOffsets();
   }
@@ -63,7 +63,7 @@ class MMC1: public Mapper {
   }
 
   std::optional<uint32_t> resolvePPU(uint16_t addr) const final {
-    if ((*m_cartridge)->hdr.charSize == 0) return {};
+    if ((*m_cartridge)->hdr.getCharNum() == 0) return {};
 
     if (addr <= 0x0FFF) {
       return m_charBaseOff + m_chrOff0 + (addr & 0x0FFF);
@@ -74,7 +74,7 @@ class MMC1: public Mapper {
     return {};
   }
 
-  std::pair<uint16_t, uint16_t> getMappedRegion() const { return {(*m_cartridge)->hdr.flags6.battery ? 0x6000 : 0x8000, 0xFFFF}; }
+  std::pair<uint16_t, uint16_t> getMappedRegion() const { return {(*m_cartridge)->hdr.flags.battery ? 0x6000 : 0x8000, 0xFFFF}; }
 
   private:
   uint32_t m_progBaseOff;
@@ -118,7 +118,7 @@ class MMC1: public Mapper {
       } break;
       case 0x03: {
         m_prgOff0 = currBank * 0x4000;
-        m_prgOff1 = ((*m_cartridge)->hdr.progSize - 1) * 0x4000;
+        m_prgOff1 = ((*m_cartridge)->hdr.getProgNum() - 1) * 0x4000;
       } break;
     }
   }

@@ -15,7 +15,7 @@ CartridgeException::CartridgeException(int32_t errorCode) {
 
 CartridgeException::CartridgeException(Type type, int32_t additionalData) {
   switch (type) {
-    case Type::ValidateFail: m_what = "Failed to validate cartridge dump"; break;
+    case Type::ValidateFail: m_what = "Faulty or unsupported cartridge dump"; break;
     case Type::UnsupportedMapper: m_what = "Unsupported mapper: " + std::to_string(additionalData); break;
     case Type::PALDump: m_what = "PAL cartridges are unsupported atm"; break;
   }
@@ -38,32 +38,29 @@ void iNES::insert(std::filesystem::path const& path) {
   }
 
   m_file = static_cast<File*>(::mmap(nullptr, sb.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, file, 0));
-  if (m_file == MAP_FAILED) {
-    auto const ecode = errno;
-    ::close(file);
-    throw CartridgeException(ecode);
-  }
-
-  if (!m_file->validate(sb.st_size)) {
-    ::munmap(m_file, sb.st_size);
-    ::close(file);
-    throw CartridgeException(CartridgeException::Type::ValidateFail);
-  }
-
-  m_size = sb.st_size;
   ::close(file);
 
-  switch (auto m = m_file->getMapperId()) {
-    case 0x00: m_mapper = createMMC0(this); break;
+  if (m_file == MAP_FAILED) {
+    auto const ecode = errno;
+    throw CartridgeException(ecode);
+  }
+  m_size = sb.st_size;
 
-    case 0x01:
-    case 0x69:
-    case 0x9b: m_mapper = createMMC1(this); break;
+  if (m_validation) {
+    if (!m_file->hdr.validate(sb.st_size)) throw CartridgeException(CartridgeException::Type::ValidateFail);
+    if (auto const r = m_file->hdr.getRegion(); r != File::Header::Region::NTSC && r != File::Header::Region::Multi)
+      throw CartridgeException(CartridgeException::Type::PALDump);
+  }
+
+  switch (auto m = m_file->hdr.getMapperId()) {
+    case 0x0000: m_mapper = createMMC0(this); break;
+
+    case 0x0001:
+    case 0x0069:
+    case 0x009b: m_mapper = createMMC1(this); break;
 
     default: throw CartridgeException(CartridgeException::Type::UnsupportedMapper, m);
   }
-
-  if (!m_file->isNTSC()) throw CartridgeException(CartridgeException::Type::PALDump);
 }
 
 iNES::~iNES() {

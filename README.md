@@ -32,6 +32,7 @@ Just compile and run the executable with the `*.nes` file passed as argument.
 ### Supported arguments
 * `--volume [0...1]` - Set the master volume for the emulator, defaults to `0.3`
 * `--hook [string]` - Set one of built-in CPU hooks, defaults to `null`. Possible values: `verbosetest`, `heatmap`, `test`, `used`. For details see [cpuhooks.cpp](./src/cpuhooks.cpp)
+* `--skipvalid` - Skip NES dump validation and try to run it anyways, the game might run into even more issues than usual if it's fails the validation
 
 Currently the emulator supports only Unix-like systems, it was tested on Arch Linux only so far.
 

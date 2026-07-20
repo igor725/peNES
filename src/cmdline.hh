@@ -2,6 +2,7 @@
 
 #include <charconv>
 #include <cstdint>
+#include <exception>
 #include <map>
 #include <optional>
 #include <string>
@@ -9,6 +10,8 @@
 #include <type_traits>
 #include <variant>
 #include <vector>
+
+class UnknownCmdlineParameter: public std::exception {};
 
 class CmdlineParser {
   template <typename T1, typename T2>
@@ -58,7 +61,8 @@ class CmdlineParser {
       case HASH_STR("volume"): return ArgType::Double;
       case HASH_STR("hook"): return ArgType::String;
       case HASH_STR("hmthreshold"): return ArgType::Int;
-      default: throw;
+      case HASH_STR("skipvalid"): return ArgType::Bool;
+      default: throw UnknownCmdlineParameter();
     }
   }
 
@@ -72,7 +76,7 @@ class CmdlineParser {
   };
 
   public:
-  CmdlineParser(int32_t argc, char* argv[]) {
+  void parse(int32_t argc, char* argv[]) {
     bool numMode = false;
     for (int32_t i = 1; i < argc; ++i) {
       std::string_view arg = argv[i];

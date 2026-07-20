@@ -29,43 +29,99 @@ class CartridgeException: public std::exception {
 class iNES {
   struct File {
     struct [[gnu::packed]] Header {
+      enum class Region : uint8_t { NTSC, PAL, Multi, Dendy };
+      enum class Device : uint8_t { FamiCom, NinVs, PlayChoise, Extended };
+
       char    magic[4];
-      uint8_t progSize;
-      uint8_t charSize;
+      uint8_t _progSize;
+      uint8_t _charSize;
 
       struct [[gnu::packed]] {
-        uint8_t mirroring     : 1;
-        uint8_t battery       : 1;
-        uint8_t trainer       : 1;
-        uint8_t fourscreenram : 1;
-        uint8_t mapperLow     : 4;
-      } flags6;
+        uint8_t mirroring  : 1;
+        uint8_t battery    : 1;
+        uint8_t trainer    : 1;
+        uint8_t altNametab : 1;
+        uint8_t mapperLow  : 4;
 
-      struct [[gnu::packed]] {
-        uint8_t vsUnisys   : 1;
-        uint8_t playchoice : 1;
+        Device  deviceType : 2;
         uint8_t nes2       : 2;
         uint8_t mapperHigh : 4;
-      } flags7;
+      } flags;
 
-      uint8_t prgRamSize;
-      uint8_t flipMode;
-      uint8_t padding[6];
+      union {
+        struct [[gnu::packed]] {
+          uint8_t prgRamSize;
+          uint8_t flipMode;
+          uint8_t padding[6];
+        } nes1;
+
+        struct [[gnu::packed]] {
+          uint8_t mapperHighest : 4;
+          uint8_t subMapper     : 4;
+
+          uint8_t progSizeHigh : 4;
+          uint8_t charSizeHigh : 4;
+
+          uint8_t progRamShifts   : 4;
+          uint8_t progNvramShifts : 4;
+
+          uint8_t charRamShifts   : 4;
+          uint8_t charNvramShifts : 4;
+
+          Region region : 2;
+          uint8_t       : 6;
+
+          uint8_t ppuType : 4;
+          uint8_t hwType  : 4;
+
+          uint8_t numMiscRoms : 2;
+          uint8_t             : 6;
+
+          uint8_t expansionDevice;
+        } nes2;
+      } flagsEx;
+
+      inline bool isNes2() const { return flags.nes2 == 2; }
+
+      inline uint16_t getProgNum() const { return (isNes2() ? (flagsEx.nes2.progSizeHigh << 8) : 0) | _progSize; }
+
+      inline uint16_t getCharNum() const { return (isNes2() ? (flagsEx.nes2.charSizeHigh << 8) : 0) | _charSize; }
+
+      inline uint32_t getPrgRamSize() const {
+        if (isNes2()) {
+          uint32_t const volatileRam = flagsEx.nes2.progRamShifts ? (64 << flagsEx.nes2.progRamShifts) : 0;
+          uint32_t const nvRam       = flagsEx.nes2.progNvramShifts ? (64 << flagsEx.nes2.progNvramShifts) : 0;
+          return volatileRam + nvRam;
+        }
+
+        return std::max(flagsEx.nes1.prgRamSize, (uint8_t)1) * 8192;
+      }
+
+      inline uint32_t getEstFileSize() const {
+        return sizeof(Header) + (getProgNum() * PRG_BLOCK_SIZE) + (getCharNum() * CHR_BLOCK_SIZE) + (flags.trainer * TRAINER_BLOCK_SIZE);
+      }
+
+      inline uint16_t getMapperId() const { return (isNes2() ? flagsEx.nes2.mapperHighest << 8 : 0) | (flags.mapperHigh << 4) | flags.mapperLow; }
+
+      inline Region getRegion() const { return isNes2() ? flagsEx.nes2.region : (flagsEx.nes1.flipMode ? Region::PAL : Region::NTSC); }
+
+      inline bool validate(size_t fsize) const {
+        if (!(magic[0] == 'N' && magic[1] == 'E' && magic[2] == 'S' && magic[3] == '\x1a')) return false; // Check header
+        if (getProgNum() == 0 || fsize < getEstFileSize()) return false;
+        if (isNes2()) {
+          if (flagsEx.nes2.progNvramShifts != 0 && flags.battery == 0) return false;
+          // TODO more validity checks?
+        }
+        return true;
+      }
+
+      inline bool isVerticalMirror() const { return flags.mirroring == 1; }
     } hdr;
 
     uint8_t data[];
-
-    bool validate(size_t fsize) const {
-      return hdr.magic[0] == 'N' && hdr.magic[1] == 'E' && hdr.magic[2] == 'S' && hdr.magic[3] == '\x1a' && hdr.flipMode <= 1 && hdr.progSize > 0 &&
-             (fsize >= sizeof(Header) + (hdr.progSize * PRG_BLOCK_SIZE) + (hdr.charSize * CHR_BLOCK_SIZE) + (hdr.flags6.trainer * TRAINER_BLOCK_SIZE));
-    }
-
-    uint8_t getMapperId() const { return (hdr.flags7.mapperHigh << 4) | hdr.flags6.mapperLow; }
-
-    bool isNTSC() const { return hdr.flipMode == 0; }
-
-    bool isVerticalMirror() const { return hdr.flags6.mirroring == 1; }
   };
+
+  static_assert(sizeof(File::Header) == 16);
 
   public:
   static constexpr size_t PRG_BLOCK_SIZE     = 16384;
@@ -85,10 +141,13 @@ class iNES {
 
   bool checkBounds(uint32_t addr) const { return addr < m_size; }
 
+  void disableValidation() { m_validation = false; }
+
   uint32_t resolveCPU(uint16_t addr) const;
 
   private:
-  std::unique_ptr<Mapper> m_mapper = {};
-  File*                   m_file   = nullptr;
-  size_t                  m_size   = 0;
+  std::unique_ptr<Mapper> m_mapper     = {};
+  File*                   m_file       = nullptr;
+  size_t                  m_size       = 0;
+  bool                    m_validation = true;
 };
