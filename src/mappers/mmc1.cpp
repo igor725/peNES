@@ -74,7 +74,7 @@ class MMC1: public Mapper {
     return {};
   }
 
-  std::pair<uint16_t, uint16_t> getMappedRegion() const { return {(*m_cartridge)->hdr.flags.battery ? 0x6000 : 0x8000, 0xFFFF}; }
+  std::pair<uint16_t, uint16_t> getMappedRegion() const final { return {(*m_cartridge)->hdr.flags.battery ? 0x6000 : 0x8000, 0xFFFF}; }
 
   private:
   uint32_t m_progBaseOff;

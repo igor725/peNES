@@ -28,7 +28,7 @@ class MMC0: public Mapper {
     return {};
   }
 
-  std::pair<uint16_t, uint16_t> getMappedRegion() const { return {0x8000, 0xFFFF}; }
+  std::pair<uint16_t, uint16_t> getMappedRegion() const final { return {0x8000, 0xFFFF}; }
 };
 
 std::unique_ptr<Mapper> createMMC0(iNES* c) {

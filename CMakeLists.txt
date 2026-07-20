@@ -17,6 +17,7 @@ add_executable(peNES
 	src/cpuhooks.cpp
 	src/mappers/mmc0.cpp
 	src/mappers/mmc1.cpp
+	src/mappers/cnrom.cpp
 )
 
 if(PENES_ENABLE_HEADLESS)

@@ -15,6 +15,7 @@ CartridgeException::CartridgeException(int32_t errorCode) {
 
 CartridgeException::CartridgeException(Type type, int32_t additionalData) {
   switch (type) {
+    case Type::IncompleteFile: m_what = "Incomplete or damaged dump"; break;
     case Type::ValidateFail: m_what = "Faulty or unsupported cartridge dump"; break;
     case Type::UnsupportedMapper: m_what = "Unsupported mapper: " + std::to_string(additionalData); break;
     case Type::PALDump: m_what = "PAL cartridges are unsupported atm"; break;
@@ -31,6 +32,8 @@ void iNES::insert(std::filesystem::path const& path) {
     ::close(file);
     throw CartridgeException(ecode);
   }
+
+  if (sb.st_size < sizeof(File)) throw CartridgeException(CartridgeException::Type::IncompleteFile);
 
   if (m_file != nullptr) {
     ::munmap(m_file, m_size);
@@ -58,6 +61,9 @@ void iNES::insert(std::filesystem::path const& path) {
     case 0x0001:
     case 0x0069:
     case 0x009b: m_mapper = createMMC1(this); break;
+
+    case 0x0003:
+    case 0x00b9: m_mapper = createCNROM(this); break;
 
     default: throw CartridgeException(CartridgeException::Type::UnsupportedMapper, m);
   }

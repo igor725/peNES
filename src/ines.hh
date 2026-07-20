@@ -14,6 +14,7 @@ class CartridgeException: public std::exception {
 
   public:
   enum class Type {
+    IncompleteFile,
     ValidateFail,
     UnsupportedMapper,
     PALDump,

@@ -22,3 +22,4 @@ class Mapper {
 
 std::unique_ptr<Mapper> createMMC0(iNES* c);
 std::unique_ptr<Mapper> createMMC1(iNES* c);
+std::unique_ptr<Mapper> createCNROM(iNES* c);
