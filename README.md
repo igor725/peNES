@@ -23,7 +23,7 @@ The initial plan was to get it going within one day which I did successfully. Th
 ## Implemented mappers
 
 > [!NOTE]
-> Note that "Implemented" doesn't mean "works completely flawlessly in all scenarios", a lot of games might>
+> Note that "Implemented" doesn't mean "works completely flawlessly in all scenarios", a lot of games might
 > straight up break because of missing or incorrectly implemented functionality inside those mappers.
 
 - [x] MMC0
@@ -38,6 +38,14 @@ Currently any attempt to run other mappers will result in exception.
 
 ## Usage
 Just compile and run the executable with the `*.nes` file passed as argument.
+
+It is possible to pipe your NES files aswell. You just need to specify `-` instead of a file path and the emulator will wait for a bytestream into the `stdin`. Ultimately this allows you to run any NES file from a web-server of some sort or through netcat for example. Here's little usage tutorial:
+```bash
+curl -L http://127.0.0.1:8486/path/to/a/totally/legal/storage/of/manually/dumped/roms/smb.nes | ./peNES -
+```
+> [!NOTE]
+> Note that this approach DOES NOT support archived files! The incoming bytestream supposed to start with the `NES\x1A` magic!
+> If you want to to run a compressed rom, you have to pipe it through the decompression utility first.
 
 ### Supported arguments
 * `--volume [0...1]` - Set the master volume for the emulator, defaults to `0.3`

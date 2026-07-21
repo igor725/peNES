@@ -136,6 +136,8 @@ class iNES {
 
   void insert(std::filesystem::path const& path);
 
+  void piped();
+
   File* get() const { return m_file; }
 
   auto operator->() const { return m_file; }
@@ -149,6 +151,10 @@ class iNES {
   size_t getFileSize() const { return m_size; }
 
   uint32_t resolveCPU(uint16_t addr) const;
+
+  protected:
+  void performSetup(int32_t fd);
+  void performSetup(void* file, size_t size);
 
   private:
   std::unique_ptr<Mapper> m_mapper     = {};

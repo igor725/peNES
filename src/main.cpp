@@ -92,7 +92,101 @@ struct Console {
     if (_stream == nullptr) _apu.setOutputEnabled(false);
 #endif
 
-    _thread = std::jthread([this](std::stop_token stop) {
+    if (auto hook = cmdline.getNamedArg<"hook">()) {
+      if (hook == "test")
+        _cpu.setHook(CPU6502::TesterHook);
+      else if (hook == "verbosetest")
+        _cpu.setHook(CPU6502::VerboseTesterHook);
+      else if (hook == "heatmap")
+        _cpu.setHook(CPU6502::HeatMapHook);
+      else if (hook == "verbosetest")
+        _cpu.setHook(CPU6502::VerboseTesterHook);
+      else if (hook == "used")
+        _cpu.setHook(CPU6502::UsedInstructionsHook);
+    }
+
+    // PPU handler
+    _cpu.addRangeHandler({0x2000, 0x3FFF}, [&](bool isWrite, uint16_t addr, uint8_t value) -> std::optional<uint8_t> {
+      if (isWrite) return _ppu.cpuWrite(addr, value);
+      return _ppu.cpuRead(addr);
+    });
+
+    // PPU, APU, I/O handler
+    _cpu.addRangeHandler({0x4000, 0x4017}, [&, latch = false](bool isWrite, uint16_t addr, uint8_t value) mutable -> std::optional<uint8_t> {
+      if (isWrite) {
+        if (_apu.handleWrite(addr, value)) {
+          return 0;
+        } else if (addr == 0x4014) {
+          return _ppu.dmaWrite(value);
+        } else if (addr == 0x4016) {
+          if ((latch = (value & 0x01)) == 0x01) {
+            _padShift[0] = _padBtns[0];
+            _padShift[1] = _padBtns[1];
+          }
+
+          return 0;
+        }
+
+        throw;
+      }
+
+      if (auto res = _apu.handleRead(addr); res.has_value()) {
+        return res.value();
+      } else if (addr >= 0x4016 && addr <= 0x4017) { // Read gamepad
+        auto const pNum = addr == 0x4016 ? 0 : 1;
+        if (latch) {
+          _padShift[pNum].a = 1;
+          return _padShift[pNum].a & 0b1;
+        }
+        return _padShift[pNum].shift();
+      }
+
+      return {};
+    });
+
+    // PPU CHR handler
+    _ppu.addRangeHandler({0x0000, 0x1FFF}, [&](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
+      return _cartridge.getMapper()->ppuOperation(isWrite, addr, value);
+    });
+
+    _ppu.setScanlineHook([&](PPU::PPUState const& state) {
+      if (state.regs.M && state.scanline < 240 && state.cycle == 260) {
+        if (_cartridge.getMapper()->nextScanline()) _cpu.triggerIRQ();
+      }
+    });
+
+#ifndef PENES_NO_SDL
+    // Audio data pusher
+    _apu.onData(_batchSize * 2, [&](std::span<float const> sample) { SDL_PutAudioStreamData(_stream, sample.data(), sample.size_bytes()); });
+#endif
+  }
+
+  void put(std::string const& path) {
+    if (_thread.joinable()) throw;
+
+    if (path == "-")
+      _cartridge.piped();
+    else
+      _cartridge.insert(path);
+
+    // SRAM, PRG-RAM, PRG-ROM handler
+    _cpu.addRangeHandler(_cartridge.getMapper()->getMappedRegion(), [&](bool isWrite, uint16_t addr, uint8_t value) -> uint8_t {
+      // Let mapper handle this stuff
+      auto const ret = _cartridge.getMapper()->cpuOperation(isWrite, addr, value);
+      if (isWrite) /* Temporary hack (probably), just in case if Mapper switched mirroring*/ {
+        _ppu.setMirroring(_cartridge->hdr.isVerticalMirror());
+      }
+      return ret;
+    });
+
+    _ppu.setMirroring(_cartridge->hdr.isVerticalMirror());
+    _cpu.reset();
+
+    _thread = setupThread();
+  }
+
+  std::jthread setupThread() {
+    return std::jthread([this](std::stop_token stop) {
       constexpr double AVG_ALPHA             = 0.1;
       constexpr double CYCLES_DEPT_THRESHOLD = (double)CPU6502::BASE_CLOCK_FREQUENCY * 0.20 /* 20% speed loss is a big deal */;
 
@@ -145,19 +239,6 @@ struct Console {
         }
       }
     });
-
-    if (auto hook = cmdline.getNamedArg<"hook">()) {
-      if (hook == "test")
-        _cpu.setHook(CPU6502::TesterHook);
-      else if (hook == "verbosetest")
-        _cpu.setHook(CPU6502::VerboseTesterHook);
-      else if (hook == "heatmap")
-        _cpu.setHook(CPU6502::HeatMapHook);
-      else if (hook == "verbosetest")
-        _cpu.setHook(CPU6502::VerboseTesterHook);
-      else if (hook == "used")
-        _cpu.setHook(CPU6502::UsedInstructionsHook);
-    }
   }
 
   ~Console() { stop(); }
@@ -170,78 +251,6 @@ struct Console {
   }
 
   auto tryLock() { return std::unique_lock(_sync, std::try_to_lock); }
-
-  void put(std::filesystem::path const& nesFile) {
-    _cartridge.insert(nesFile);
-
-    // PPU handler
-    _cpu.addRangeHandler({0x2000, 0x3FFF}, [&](bool isWrite, uint16_t addr, uint8_t value) -> std::optional<uint8_t> {
-      if (isWrite) return _ppu.cpuWrite(addr, value);
-      return _ppu.cpuRead(addr);
-    });
-
-    // PPU, APU, I/O handler
-    _cpu.addRangeHandler({0x4000, 0x4017}, [&, latch = false](bool isWrite, uint16_t addr, uint8_t value) mutable -> std::optional<uint8_t> {
-      if (isWrite) {
-        if (_apu.handleWrite(addr, value)) {
-          return 0;
-        } else if (addr == 0x4014) {
-          return _ppu.dmaWrite(value);
-        } else if (addr == 0x4016) {
-          if ((latch = (value & 0x01)) == 0x01) {
-            _padShift[0] = _padBtns[0];
-            _padShift[1] = _padBtns[1];
-          }
-
-          return 0;
-        }
-
-        throw;
-      }
-
-      if (auto res = _apu.handleRead(addr); res.has_value()) {
-        return res.value();
-      } else if (addr >= 0x4016 && addr <= 0x4017) { // Read gamepad
-        auto const pNum = addr == 0x4016 ? 0 : 1;
-        if (latch) {
-          _padShift[pNum].a = 1;
-          return _padShift[pNum].a & 0b1;
-        }
-        return _padShift[pNum].shift();
-      }
-
-      return {};
-    });
-
-    // SRAM, PRG-RAM, PRG-ROM handler
-    _cpu.addRangeHandler(_cartridge.getMapper()->getMappedRegion(), [&](bool isWrite, uint16_t addr, uint8_t value) -> uint8_t {
-      // Let mapper handle this stuff
-      auto const ret = _cartridge.getMapper()->cpuOperation(isWrite, addr, value);
-      if (isWrite) /* Temporary hack (probably), just in case if Mapper switched mirroring*/ {
-        _ppu.setMirroring(_cartridge->hdr.isVerticalMirror());
-      }
-      return ret;
-    });
-
-    // PPU CHR handler
-    _ppu.addRangeHandler({0x0000, 0x1FFF}, [&](bool isWrite, uint16_t addr, uint8_t value) mutable -> uint8_t {
-      return _cartridge.getMapper()->ppuOperation(isWrite, addr, value);
-    });
-
-    _ppu.setScanlineHook([&](PPU::PPUState const& state) {
-      if (state.regs.M && state.scanline < 240 && state.cycle == 260) {
-        if (_cartridge.getMapper()->nextScanline()) _cpu.triggerIRQ();
-      }
-    });
-
-#ifndef PENES_NO_SDL
-    // Audio data pusher
-    _apu.onData(_batchSize * 2, [&](std::span<float const> sample) { SDL_PutAudioStreamData(_stream, sample.data(), sample.size_bytes()); });
-#endif
-
-    _ppu.setMirroring(_cartridge->hdr.isVerticalMirror());
-    _cpu.reset();
-  }
 
   PPU::Frame<uint32_t> step(std::unique_lock<std::mutex> const& lock, Delta time) {
     _cyclesDebt += CPU6502::BASE_CLOCK_FREQUENCY * std::min(time.count(), 20.0);
