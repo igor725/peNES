@@ -112,7 +112,7 @@ class iNES {
         return true;
       }
 
-      inline bool isVerticalMirror() const { return flags.mirroring == 1; }
+      inline bool isVerticalMirror() const { return flags.mirroring == 0; }
     } hdr;
 
     uint8_t data[];
@@ -121,8 +121,6 @@ class iNES {
   static_assert(sizeof(File::Header) == 16);
 
   public:
-  static constexpr size_t TRAINER_BLOCK_SIZE = 512;
-
   iNES() = default;
   ~iNES();
 

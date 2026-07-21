@@ -4,11 +4,8 @@
 #include <memory>
 
 class MMC0: public Mapper {
-  static constexpr size_t PROG_BANK_SIZE = 0x4000;
-  static constexpr size_t CHAR_BANK_SIZE = 0x2000;
-
   public:
-  MMC0(iNES* c): Mapper(c, PROG_BANK_SIZE, CHAR_BANK_SIZE) {}
+  MMC0(iNES* c): Mapper(c) {}
 
   uint8_t cpuOperation(bool /* isWrite */, uint16_t addr, uint8_t /* value */) final { // We're ignoring writes here completely
     if (addr >= 0x8000 /* Start of PRG */) {

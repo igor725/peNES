@@ -65,6 +65,8 @@ void iNES::insert(std::filesystem::path const& path) {
     case 0x0003:
     case 0x00b9: m_mapper = createCNROM(this); break;
 
+    case 0x0004: m_mapper = createMMC3(this); break;
+
     default: throw CartridgeException(CartridgeException::Type::UnsupportedMapper, m);
   }
 }

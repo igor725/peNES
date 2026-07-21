@@ -2,10 +2,10 @@
 #include "dumper.hh"
 #include "mapper.hh"
 
-Mapper::Mapper(iNES* c, uint16_t progBankSize, uint16_t charBankSize): m_cartridge(*c) {
-  if (m_cartridge->hdr.flags.trainer) m_progBaseOff = iNES::TRAINER_BLOCK_SIZE;
-  m_charBaseOff = m_progBaseOff + (m_cartridge->hdr.getProgNum() * progBankSize);
-  if (m_charBaseOff + (m_cartridge->hdr.getCharNum() * charBankSize) > m_cartridge.getFileSize())
+Mapper::Mapper(iNES* c): m_cartridge(*c) {
+  if (m_cartridge->hdr.flags.trainer) m_progBaseOff = TRAINER_BLOCK_SIZE;
+  m_charBaseOff = m_progBaseOff + (m_cartridge->hdr.getProgNum() * PROG_BANK_SIZE);
+  if (m_charBaseOff + (m_cartridge->hdr.getCharNum() * CHAR_BANK_SIZE) > m_cartridge.getFileSize())
     throw CartridgeException(CartridgeException::Type::IncompleteFile);
 }
 

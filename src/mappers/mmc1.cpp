@@ -5,11 +5,8 @@
 #include <memory>
 
 class MMC1: public Mapper {
-  static constexpr size_t PROG_BANK_SIZE = 0x4000;
-  static constexpr size_t CHAR_BANK_SIZE = 0x2000;
-
   public:
-  MMC1(iNES* c): Mapper(c, PROG_BANK_SIZE, CHAR_BANK_SIZE) { updateOffsets(); }
+  MMC1(iNES* c): Mapper(c) { updateOffsets(); }
 
   uint8_t cpuOperation(bool isWrite, uint16_t addr, uint8_t value) final {
     if (addr >= 0x6000 && addr <= 0x7FFF) return handleBattery(isWrite, addr & 0x1FFF, value);

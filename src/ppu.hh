@@ -21,6 +21,31 @@ class PPU: public MMU {
   }};
 
   public:
+  static constexpr uint16_t PPU_FRAMEBUFFER_PITCH  = 0x100;
+  static constexpr uint8_t  CTRL_NAMETAB_SELECT    = 0x03;
+  static constexpr uint8_t  CTRL_VRAM_INCREMENT    = 0x04;
+  static constexpr uint8_t  CTRL_SPR_TAB_ADDR      = 0x08;
+  static constexpr uint8_t  CTRL_BG_TAB_ADDR       = 0x10;
+  static constexpr uint8_t  CTRL_TALL_SPRITE       = 0x20;
+  static constexpr uint8_t  CTRL_MASTER_SELECT     = 0x40;
+  static constexpr uint8_t  CTRL_GEN_NMI           = 0x80;
+  static constexpr uint8_t  STATUS_OPEN_BUS        = 0x0F;
+  static constexpr uint8_t  STATUS_SPRITE_OVERFLOW = 0x20;
+  static constexpr uint8_t  STATUS_SPRITE_ZERO_HIT = 0x40;
+  static constexpr uint8_t  STATUS_VBLANK          = 0x80;
+  static constexpr uint8_t  MASK_GREYSCALE         = 0x01;
+  static constexpr uint8_t  MASK_BG_LC_CLIP        = 0x02;
+  static constexpr uint8_t  MASK_SPRITE_LC_CLIP    = 0x04;
+  static constexpr uint8_t  MASK_DRAW_BG           = 0x08;
+  static constexpr uint8_t  MASK_DRAW_SPRITE       = 0x10;
+  static constexpr uint8_t  MASK_EMP_RED           = 0x20;
+  static constexpr uint8_t  MASK_EMP_GREEN         = 0x40;
+  static constexpr uint8_t  MASK_EMP_BLUE          = 0x80;
+  static constexpr uint8_t  SPRITE_PALETTE         = 0x03;
+  static constexpr uint8_t  SPRITE_PRIO            = 0x20;
+  static constexpr uint8_t  SPRITE_FLIP_HORIZ      = 0x40;
+  static constexpr uint8_t  SPRITE_FLIP_VERTI      = 0x80;
+
   struct PPUState {
     struct {
       uint8_t C = 0;
@@ -65,6 +90,8 @@ class PPU: public MMU {
 
   enum class RegionMode : uint8_t { NTSC = 0, PAL = 1, Dendy = 2 };
 
+  using ScanlineHook = std::function<void(PPUState const&)>;
+
   PPU(CPU6502& c);
   ~PPU();
 
@@ -79,7 +106,9 @@ class PPU: public MMU {
 
   void setRegionMode(RegionMode rg) { m_timing = &REGION_TIMINGS[static_cast<uint8_t>(rg)]; }
 
-  void setVerticalMirroring() { m_mirrorVertically = true; }
+  void setMirroring(bool value) { m_mirrorVertically = value; }
+
+  void setScanlineHook(ScanlineHook&& hook) { m_scanlineHook = std::move(hook); }
 
   PPUState dumpState() const { return m_state; }
 
@@ -93,32 +122,9 @@ class PPU: public MMU {
   void     step();
 
   private:
-  static constexpr uint16_t PPU_FRAMEBUFFER_PITCH  = 0x100;
-  static constexpr uint8_t  CTRL_NAMETAB_SELECT    = 0x03;
-  static constexpr uint8_t  CTRL_VRAM_INCREMENT    = 0x04;
-  static constexpr uint8_t  CTRL_SPR_TAB_ADDR      = 0x08;
-  static constexpr uint8_t  CTRL_BG_TAB_ADDR       = 0x10;
-  static constexpr uint8_t  CTRL_TALL_SPRITE       = 0x20;
-  static constexpr uint8_t  CTRL_MASTER_SELECT     = 0x40;
-  static constexpr uint8_t  CTRL_GEN_NMI           = 0x80;
-  static constexpr uint8_t  STATUS_OPEN_BUS        = 0x0F;
-  static constexpr uint8_t  STATUS_SPRITE_OVERFLOW = 0x20;
-  static constexpr uint8_t  STATUS_SPRITE_ZERO_HIT = 0x40;
-  static constexpr uint8_t  STATUS_VBLANK          = 0x80;
-  static constexpr uint8_t  MASK_GREYSCALE         = 0x01;
-  static constexpr uint8_t  MASK_BG_LC_CLIP        = 0x02;
-  static constexpr uint8_t  MASK_SPRITE_LC_CLIP    = 0x04;
-  static constexpr uint8_t  MASK_DRAW_BG           = 0x08;
-  static constexpr uint8_t  MASK_DRAW_SPRITE       = 0x10;
-  static constexpr uint8_t  MASK_EMP_RED           = 0x20;
-  static constexpr uint8_t  MASK_EMP_GREEN         = 0x40;
-  static constexpr uint8_t  MASK_EMP_BLUE          = 0x80;
-  static constexpr uint8_t  SPRITE_PALETTE         = 0x03;
-  static constexpr uint8_t  SPRITE_PRIO            = 0x20;
-  static constexpr uint8_t  SPRITE_FLIP_HORIZ      = 0x40;
-  static constexpr uint8_t  SPRITE_FLIP_VERTI      = 0x80;
-
   CPU6502& m_cpu;
+
+  ScanlineHook m_scanlineHook;
 
   Palette m_colorPalette;
 

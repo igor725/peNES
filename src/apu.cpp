@@ -377,7 +377,11 @@ void APU::step(uint8_t cycles) {
       m_state.sampleCount += 1;
 
       if ((m_state.cycleAccumulator += 1.0) >= m_state.cyclesPerSample) {
-        m_handler(m_state.sampleAccumulator / m_state.sampleCount);
+        m_samples.push_back(m_state.sampleAccumulator / m_state.sampleCount);
+        if (m_samples.size() >= m_batchSize) {
+          m_handler(m_samples);
+          m_samples.erase(m_samples.begin(), m_samples.begin() + m_batchSize);
+        }
         m_state.sampleAccumulator = 0.0f;
         m_state.sampleCount       = 0;
         m_state.cycleAccumulator -= m_state.cyclesPerSample;

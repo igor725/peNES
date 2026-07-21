@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <span>
 
 class APU {
   static constexpr double   BASE_APU_FREQUENCY  = 1789773.0;
@@ -127,7 +128,7 @@ class APU {
     DeltaModChannel             dmc;
   };
 
-  using APUHandler = std::function<void(float sample)>;
+  using APUHandler = std::function<void(std::span<float const> samples)>;
 
   APU(CPU6502& c);
   ~APU();
@@ -142,7 +143,11 @@ class APU {
 
   void step(uint8_t cycles);
 
-  void onData(APUHandler&& handler) { m_handler = std::move(handler); }
+  void onData(size_t batchSize, APUHandler&& handler) {
+    m_samples.reserve(batchSize);
+    m_handler   = std::move(handler);
+    m_batchSize = batchSize;
+  }
 
   APUState dumpState() const { return m_state; }
 
@@ -152,7 +157,9 @@ class APU {
   float mixChannels() const;
 
   private:
-  CPU6502&   m_cpu;
-  APUHandler m_handler;
-  APUState   m_state;
+  CPU6502&           m_cpu;
+  APUHandler         m_handler;
+  APUState           m_state;
+  size_t             m_batchSize;
+  std::vector<float> m_samples;
 };

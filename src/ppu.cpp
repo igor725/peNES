@@ -275,6 +275,8 @@ void PPU::step() {
     m_state.cycle = 0, m_state.spritesPerScan = 0;
     if (++m_state.scanline >= m_timing->totalScanlines) m_state.scanline = 0;
   }
+
+  if (m_scanlineHook) m_scanlineHook(m_state);
 }
 
 void PPU::run(uint8_t cycles) {

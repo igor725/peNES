@@ -11,13 +11,19 @@ class iNES;
 
 class Mapper {
   public:
-  Mapper(iNES* c, uint16_t progBankSize, uint16_t charBankSize);
+  static constexpr size_t TRAINER_BLOCK_SIZE = 0x200;
+  static constexpr size_t PROG_BANK_SIZE     = 0x4000;
+  static constexpr size_t CHAR_BANK_SIZE     = 0x2000;
+
+  Mapper(iNES* c);
 
   virtual ~Mapper() = default;
 
   virtual uint8_t                       cpuOperation(bool isWrite, uint16_t addr, uint8_t value) = 0;
   virtual uint8_t                       ppuOperation(bool isWrite, uint16_t addr, uint8_t value) = 0;
   virtual std::pair<uint16_t, uint16_t> getMappedRegion() const                                  = 0;
+
+  virtual bool nextScanline() { return false; };
 
   protected:
   MapperDumper       prepareMapperDumper() const;

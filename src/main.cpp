@@ -55,7 +55,8 @@ struct Console {
   std::array<PadState, 2> _padBtns;
   std::array<PadState, 2> _padShift;
 
-  SDL_AudioStream* _stream = nullptr;
+  int32_t          _batchSize = 0;
+  SDL_AudioStream* _stream    = nullptr;
 
   std::atomic<double> _cyclesDebt = 0;
   std::atomic<double> _speed      = 100.0; // We're starting at 100%
@@ -74,7 +75,7 @@ struct Console {
     SDL_AudioSpec spec;
 
     if (auto const volume = cmdline.getNamedArg<"volume">(0.3).value(); volume > 0.0) {
-      if (SDL_GetAudioDeviceFormat(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr)) {
+      if (SDL_GetAudioDeviceFormat(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, &_batchSize)) {
         spec.channels = 1, spec.format = SDL_AUDIO_F32LE;
         if ((_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr)) != nullptr) {
           SDL_SetAudioStreamGain(_stream, volume);
@@ -211,7 +212,11 @@ struct Console {
     // SRAM, PRG-RAM, PRG-ROM handler
     _cpu.addRangeHandler(_cartridge.getMapper()->getMappedRegion(), [&](bool isWrite, uint16_t addr, uint8_t value) -> uint8_t {
       // Let mapper handle this stuff
-      return _cartridge.getMapper()->cpuOperation(isWrite, addr, value);
+      auto const ret = _cartridge.getMapper()->cpuOperation(isWrite, addr, value);
+      if (isWrite) /* Temporary hack (probably), just in case if Mapper switched mirroring*/ {
+        _ppu.setMirroring(_cartridge->hdr.isVerticalMirror());
+      }
+      return ret;
     });
 
     // PPU CHR handler
@@ -219,12 +224,17 @@ struct Console {
       return _cartridge.getMapper()->ppuOperation(isWrite, addr, value);
     });
 
+    _ppu.setScanlineHook([&](PPU::PPUState const& state) {
+      if (state.regs.M && state.scanline < 240 && state.cycle == 260) {
+        if (_cartridge.getMapper()->nextScanline()) _cpu.triggerIRQ();
+      }
+    });
+
 #ifndef PENES_NO_SDL
     // Audio data pusher
-    _apu.onData([&](float sample) { SDL_PutAudioStreamData(_stream, &sample, 4); });
+    _apu.onData(_batchSize * 2, [&](std::span<float const> sample) { SDL_PutAudioStreamData(_stream, sample.data(), sample.size_bytes()); });
 #endif
 
-    if (_cartridge->hdr.isVerticalMirror()) _ppu.setVerticalMirroring();
     _cpu.reset();
   }
 
