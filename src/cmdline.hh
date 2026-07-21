@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <charconv>
 #include <cstdint>
 #include <exception>
@@ -26,7 +27,7 @@ class CmdlineParser {
     return hash;
   }
 
-  static consteval size_t HASH_STR(std::string_view str) { return HASH(str.begin(), str.end()); }
+  static constexpr size_t HASH_STR(std::string_view str) { return HASH(str.begin(), str.end()); }
 
   enum class ArgType { Int, Double, String, Bool };
   using ArgVariant = std::variant<int64_t, double, std::string, bool>;
@@ -95,12 +96,12 @@ class CmdlineParser {
         switch (getExpectedType(hash)) {
           case ArgType::Int: {
             int64_t v = 0;
-            std::from_chars(valStr.data(), valStr.end(), v);
+            std::from_chars(valStr.data(), valStr.data() + valStr.size(), v);
             m_list[hash] = v;
           } break;
           case ArgType::Double: {
             double v = 0.0;
-            std::from_chars(valStr.data(), valStr.end(), v);
+            std::from_chars(valStr.data(), valStr.data() + valStr.size(), v);
             m_list[hash] = v;
           } break;
           case ArgType::Bool: {

@@ -5,6 +5,8 @@
 #include <cstdint>
 
 class Palette {
+  static constexpr double PI_NUM = 3.14159265358979323846;
+
   public:
   Palette() { updatePalette(); }
 
@@ -54,7 +56,7 @@ class Palette {
           sig = v0;
         }
 
-        float angle = p * (M_PI / 6.0f) + m_hueShift;
+        float angle = p * (PI_NUM / 6.0f) + m_hueShift;
         float y     = sig;
         float iComp = sig * std::cos(angle) * m_saturation;
         float qComp = sig * std::sin(angle) * m_saturation;

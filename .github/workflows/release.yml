@@ -1,0 +1,49 @@
+name: build peNES
+
+on:
+  push:
+
+jobs:
+  build:
+    name: peNES
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - name: Windows
+            os: windows-latest
+            compiler_cxx: clang
+            extension: .exe
+          - name: Linux
+            os: ubuntu-latest
+            compiler_cxx: clang++
+            extension:
+
+    runs-on: ${{ matrix.config.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install Latest LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "21"
+          env: true
+
+      - name: Setup SDL3
+        uses: libsdl-org/setup-sdl@main
+        id: sdl
+        with:
+          install-linux-dependencies: true
+          version: 3-latest
+
+      - name: Build emulator
+        run: |
+          cmake -GNinja -S. -Bbuild/ -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${{ matrix.config.compiler_cxx }}
+          cmake --build build/ -j4
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: peNES
+          path: ./build/peNES${{ matrix.config.extension }}
