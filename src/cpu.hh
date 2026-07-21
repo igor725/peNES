@@ -67,6 +67,20 @@ class CPU6502: public MMU {
   };
 
   public:
+  struct CPUState {
+    Registers regs;
+
+    struct {
+      bool nmiTriggered : 1;
+      bool irqTriggered : 1;
+      bool intrClrSchd  : 1;
+    };
+
+    uint8_t padding[6];
+
+    std::array<uint8_t, 0x800> ram;
+  };
+
   enum class ExecStage : uint8_t {
     PreParse, // Parsing stage, only instruction opcode is known at this stage
     PreExec,  // Pre execution stage; mnemonic, addressing mode and operand are ready to read
@@ -248,7 +262,7 @@ class CPU6502: public MMU {
   void pushStack(T val) {
     static_assert(std::is_integral_v<T> && sizeof(T) <= 2);
     if constexpr (sizeof(T) == 1) {
-      m_ram[0x100 + m_regs.SP--] = val;
+      m_state.ram[0x100 + m_state.regs.SP--] = val;
     } else if constexpr (sizeof(T) == 2) {
       pushStack<uint8_t>((val >> 8) & 0xFF);
       pushStack<uint8_t>(val & 0xFF);
@@ -259,7 +273,7 @@ class CPU6502: public MMU {
   T popStack() {
     static_assert(std::is_integral_v<T> && sizeof(T) <= 2);
     if constexpr (sizeof(T) == 1) {
-      return m_ram[0x100 | ++m_regs.SP];
+      return m_state.ram[0x100 | ++m_state.regs.SP];
     } else if constexpr (sizeof(T) == 2) {
       auto _low  = popStack<uint8_t>();
       auto _high = popStack<uint8_t>();
@@ -268,7 +282,7 @@ class CPU6502: public MMU {
   }
 
   void pushStatus(bool software) {
-    auto p = m_regs.P;
+    auto p = m_state.regs.P;
 
     p.B = software;
     pushStack<uint8_t>(p._raw);
@@ -292,30 +306,31 @@ class CPU6502: public MMU {
   }
 
   inline std::pair<uint8_t, uint16_t> _evalIndexedXIndir(InstructionStatus const& status) {
-    return {3, (readMemByte(static_cast<uint8_t>((status.operand.u8 + m_regs.X) + 1)) << 8) | readMemByte(static_cast<uint8_t>(status.operand.u8 + m_regs.X))};
+    return {3, (readMemByte(static_cast<uint8_t>((status.operand.u8 + m_state.regs.X) + 1)) << 8) |
+                   readMemByte(static_cast<uint8_t>(status.operand.u8 + m_state.regs.X))};
   }
 
   inline std::pair<uint8_t, uint16_t> _evalAbsolute(InstructionStatus const& status) { return {1, status.operand.u16}; }
 
   inline std::pair<uint8_t, uint16_t> _evalAbsoluteX(InstructionStatus const& status) {
-    uint16_t const targetAddr = status.operand.u16 + m_regs.X;
+    uint16_t const targetAddr = status.operand.u16 + m_state.regs.X;
     return {_isPageCrossTaxed(status) && _isPageCrossed(status.operand.u16, targetAddr) ? 2 : 1, targetAddr};
   }
 
   inline std::pair<uint8_t, uint16_t> _evalAbsoluteY(InstructionStatus const& status) {
-    uint16_t const targetAddr = status.operand.u16 + m_regs.Y;
+    uint16_t const targetAddr = status.operand.u16 + m_state.regs.Y;
     return {_isPageCrossTaxed(status) && _isPageCrossed(status.operand.u16, targetAddr) ? 2 : 1, targetAddr};
   }
 
   inline std::pair<uint8_t, uint16_t> _evalIndirIndexedY(InstructionStatus const& status) {
     uint16_t const base   = (readMemByte((status.operand.u8 + 1) & 0xFF) << 8) | readMemByte(status.operand.u8);
-    uint16_t const target = base + m_regs.Y;
+    uint16_t const target = base + m_state.regs.Y;
     return {_isPageCrossTaxed(status) && _isPageCrossed(base, target) ? 3 : 2, target};
   }
 
-  inline std::pair<uint8_t, uint16_t> _evalZeroPageX(InstructionStatus const& status) { return {1, static_cast<uint8_t>(status.operand.u8 + m_regs.X)}; }
+  inline std::pair<uint8_t, uint16_t> _evalZeroPageX(InstructionStatus const& status) { return {1, static_cast<uint8_t>(status.operand.u8 + m_state.regs.X)}; }
 
-  inline std::pair<uint8_t, uint16_t> _evalZeroPageY(InstructionStatus const& status) { return {1, static_cast<uint8_t>(status.operand.u8 + m_regs.Y)}; }
+  inline std::pair<uint8_t, uint16_t> _evalZeroPageY(InstructionStatus const& status) { return {1, static_cast<uint8_t>(status.operand.u8 + m_state.regs.Y)}; }
 
   std::pair<uint8_t, uint16_t> evaluateOperandToAddr(InstructionStatus const& status) {
     if (status.flags.stage != ExecStage::PreExec) throw;
@@ -340,7 +355,7 @@ class CPU6502: public MMU {
   template <typename T>
   std::tuple<uint8_t, uint16_t, T> evaluateOperandToValue(InstructionStatus const& status) {
     switch (status.flags.addrMode) {
-      case AddrMode::Accum: return {0, 0, m_regs.A};
+      case AddrMode::Accum: return {0, 0, m_state.regs.A};
       case AddrMode::Immediate: return {0, 0, static_cast<T>(status.operand.u8)};
       case AddrMode::Indirect: {
         uint16_t const high = (status.operand.u16 & 0xFF00) | static_cast<uint8_t>((status.operand.u16 & 0xFF) + 1);
@@ -364,7 +379,7 @@ class CPU6502: public MMU {
   void    triggerNMI();
   void    triggerIRQ();
 
-  Registers& exposeState() { return m_regs; }
+  Registers& exposeState() { return m_state.regs; }
 
   void setHook(CPUHook&& hook) { m_hook = std::move(hook); }
 
@@ -382,10 +397,14 @@ class CPU6502: public MMU {
 
   template <typename T>
   T readPC() {
-    auto orig = m_regs.PC;
-    m_regs.PC += sizeof(T);
+    auto orig = m_state.regs.PC;
+    m_state.regs.PC += sizeof(T);
     return readMem<T>(orig);
   }
+
+  CPUState dumpState() const { return m_state; }
+
+  void restoreState(CPUState&& state) { m_state = std::move(state); }
 
   protected:
   uint8_t handleControl(InstructionStatus& status);
@@ -399,16 +418,6 @@ class CPU6502: public MMU {
   uint8_t interrupt(uint16_t vector, bool software = false);
 
   private:
-  Registers m_regs;
-
-  struct {
-    bool m_nmiTriggered : 1;
-    bool m_irqTriggered : 1;
-    bool m_intrClrSchd  : 1;
-  };
-
-  uint8_t m_padding[6];
-
-  std::array<uint8_t, 0x800> m_ram;
-  CPUHook                    m_hook;
+  CPUState m_state;
+  CPUHook  m_hook;
 };

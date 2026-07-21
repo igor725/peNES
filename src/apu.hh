@@ -108,6 +108,25 @@ class APU {
   };
 
   public:
+  struct APUState {
+    bool     extendedState = false;
+    bool     irqInhibit    = false;
+    bool     frameIrq      = false;
+    bool     outEnabled    = true;
+    uint8_t  step          = 0;
+    uint16_t cycles        = 0;
+
+    double   cyclesPerSample   = 0.0;
+    double   cycleAccumulator  = 0.0;
+    float    sampleAccumulator = 0.0f;
+    uint32_t sampleCount       = 0;
+
+    std::array<PulseChannel, 2> pulse;
+    TriangleChannel             triangle;
+    NoiseChannel                noise;
+    DeltaModChannel             dmc;
+  };
+
   using APUHandler = std::function<void(float sample)>;
 
   APU(CPU6502& c);
@@ -117,35 +136,23 @@ class APU {
 
   bool handleWrite(uint16_t addr, uint8_t value);
 
-  void setOutputEnabled(bool state) { m_outEnabled = state; }
+  void setOutputEnabled(bool state) { m_state.outEnabled = state; }
 
-  void setSamplingRate(double value) { m_cyclesPerSample = BASE_APU_FREQUENCY / value; }
+  void setSamplingRate(double value) { m_state.cyclesPerSample = BASE_APU_FREQUENCY / value; }
 
   void step(uint8_t cycles);
 
   void onData(APUHandler&& handler) { m_handler = std::move(handler); }
 
+  APUState dumpState() const { return m_state; }
+
+  void restoreState(APUState&& state) { m_state = std::move(state); }
+
   protected:
   float mixChannels() const;
 
   private:
-  CPU6502& m_cpu;
-
-  bool     m_5stepSequence = false;
-  bool     m_irqInhibit    = false;
-  bool     m_frameIrq      = false;
-  bool     m_outEnabled    = true;
-  uint8_t  m_step          = 0;
-  uint16_t m_cycles        = 0;
-
-  double   m_cyclesPerSample   = 0.0;
-  double   m_cycleAccumulator  = 0.0;
-  float    m_sampleAccumulator = 0.0f;
-  uint32_t m_sampleCount       = 0;
-
-  std::array<PulseChannel, 2> m_pulse;
-  TriangleChannel             m_triangle;
-  NoiseChannel                m_noise;
-  DeltaModChannel             m_dmc;
-  APUHandler                  m_handler;
+  CPU6502&   m_cpu;
+  APUHandler m_handler;
+  APUState   m_state;
 };

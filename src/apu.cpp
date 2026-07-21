@@ -7,7 +7,7 @@
 static const uint8_t LENGTH_TABLE[32] = {10, 254, 20, 2,  40, 4,  80, 6,  160, 8,  60, 10, 14, 12, 26, 14,
                                          12, 16,  24, 18, 48, 20, 96, 22, 192, 24, 72, 26, 16, 28, 32, 30};
 
-APU::APU(CPU6502& c): m_cpu(c), m_pulse({0, 1}) {}
+APU::APU(CPU6502& c): m_cpu(c), m_state({.pulse = {0, 1}}) {}
 
 APU::~APU() {}
 
@@ -255,10 +255,10 @@ void APU::DeltaModChannel::operation(uint8_t opCode, uint8_t value) {
 
 std::optional<uint8_t> APU::handleRead(uint16_t addr) {
   if (addr == 0x4015) /* APU Status */ {
-    bool temp  = m_frameIrq;
-    m_frameIrq = false;
-    return (m_dmc._irqTriggered << 7) | (temp << 6) | (m_dmc._enabled << 4) | ((m_noise._length > 0) << 3) | ((m_triangle._length > 0) << 2) |
-           ((m_pulse[1]._length > 0) << 1) | (m_pulse[0]._length > 0);
+    bool temp        = m_state.frameIrq;
+    m_state.frameIrq = false;
+    return (m_state.dmc._irqTriggered << 7) | (temp << 6) | (m_state.dmc._enabled << 4) | ((m_state.noise._length > 0) << 3) |
+           ((m_state.triangle._length > 0) << 2) | ((m_state.pulse[1]._length > 0) << 1) | (m_state.pulse[0]._length > 0);
   }
 
   return {};
@@ -267,49 +267,49 @@ std::optional<uint8_t> APU::handleRead(uint16_t addr) {
 bool APU::handleWrite(uint16_t addr, uint8_t value) {
   if (addr >= 0x4000 && addr <= 0x4007) /* Pulse 1 + Pulse 2 */ {
     addr -= 0x4000;
-    m_pulse[(addr >> 2) & 0b1].operation(addr & 0b11, value);
+    m_state.pulse[(addr >> 2) & 0b1].operation(addr & 0b11, value);
     return true;
   } else if (addr >= 0x4008 && addr <= 0x400B) /* Triangle */ {
     addr -= 0x4008;
-    m_triangle.operation(addr, value);
+    m_state.triangle.operation(addr, value);
     return true;
   } else if (addr >= 0x400C && addr <= 0x400F) /* Noise */ {
     addr -= 0x400C;
-    m_noise.operation(addr, value);
+    m_state.noise.operation(addr, value);
     return true;
   } else if (addr >= 0x4010 && addr <= 0x4013) /* DMC */ {
     addr -= 0x4010;
-    m_dmc.operation(addr, value);
+    m_state.dmc.operation(addr, value);
     return true;
   } else if (addr == 0x4015) /* APU Status */ {
-    if ((m_pulse[0]._enabled = value & 0b00000001) == 0) m_pulse[0]._length = 0;
-    if ((m_pulse[1]._enabled = value & 0b00000010) == 0) m_pulse[1]._length = 0;
-    if ((m_triangle._enabled = value & 0b00000100) == 0) m_triangle._length = 0;
-    if ((m_noise._enabled = value & 0b00001000) == 0) m_noise._length = 0;
-    if ((m_dmc._enabled = value & 0b00010000) == 0) {
-      m_dmc._currentLength = 0;
+    if ((m_state.pulse[0]._enabled = value & 0b00000001) == 0) m_state.pulse[0]._length = 0;
+    if ((m_state.pulse[1]._enabled = value & 0b00000010) == 0) m_state.pulse[1]._length = 0;
+    if ((m_state.triangle._enabled = value & 0b00000100) == 0) m_state.triangle._length = 0;
+    if ((m_state.noise._enabled = value & 0b00001000) == 0) m_state.noise._length = 0;
+    if ((m_state.dmc._enabled = value & 0b00010000) == 0) {
+      m_state.dmc._currentLength = 0;
     } else {
-      if (m_dmc._currentLength == 0) {
-        m_dmc._currentAddress = m_dmc._sampleAddress;
-        m_dmc._currentLength  = m_dmc._sampleLength;
+      if (m_state.dmc._currentLength == 0) {
+        m_state.dmc._currentAddress = m_state.dmc._sampleAddress;
+        m_state.dmc._currentLength  = m_state.dmc._sampleLength;
       }
     }
-    m_dmc._irqTriggered = false;
+    m_state.dmc._irqTriggered = false;
     return true;
   } else if (addr == 0x4017) /* Frame Counter */ {
-    m_5stepSequence = (value & 0b10000000) > 0;
-    m_irqInhibit    = (value & 0b01000000) > 0;
-    m_frameIrq      = false;
-    m_cycles        = 0;
-    m_step          = 0;
+    m_state.extendedState = (value & 0b10000000) > 0;
+    m_state.irqInhibit    = (value & 0b01000000) > 0;
+    m_state.frameIrq      = false;
+    m_state.cycles        = 0;
+    m_state.step          = 0;
 
-    if (m_5stepSequence) {
-      m_triangle.clock();
-      m_triangle.advanceLength();
-      m_noise.advanceLength();
+    if (m_state.extendedState) {
+      m_state.triangle.clock();
+      m_state.triangle.advanceLength();
+      m_state.noise.advanceLength();
       for (uint8_t i = 0; i < 2; ++i) {
-        m_pulse[i].clockEnvelope();
-        m_pulse[i].clock();
+        m_state.pulse[i].clockEnvelope();
+        m_state.pulse[i].clock();
       }
     }
     return true;
@@ -319,10 +319,10 @@ bool APU::handleWrite(uint16_t addr, uint8_t value) {
 }
 
 float APU::mixChannels() const {
-  double const pulseOut    = 95.88 / ((8128.0 / ((double)m_pulse[0].output() + (double)m_pulse[1].output())) + 100.0);
-  double const triangleOut = ((double)m_triangle.output() / 8227.0);
-  double const noiseOut    = ((double)m_noise.output() / 12241.0);
-  double const dmcOut      = ((double)m_dmc.output() / 22638.0);
+  double const pulseOut    = 95.88 / ((8128.0 / ((double)m_state.pulse[0].output() + (double)m_state.pulse[1].output())) + 100.0);
+  double const triangleOut = ((double)m_state.triangle.output() / 8227.0);
+  double const noiseOut    = ((double)m_state.noise.output() / 12241.0);
+  double const dmcOut      = ((double)m_state.dmc.output() / 22638.0);
   double const apprx       = 1.0 / (triangleOut + noiseOut + dmcOut);
   double const tndOut      = 159.59 / (apprx + 100.0);
   return pulseOut + tndOut;
@@ -330,38 +330,38 @@ float APU::mixChannels() const {
 
 void APU::step(uint8_t cycles) {
   while (cycles--) {
-    if (m_cycles % 2 == 0) {
+    if (m_state.cycles % 2 == 0) {
       for (uint8_t i = 0; i < 2; ++i) {
-        m_pulse[i].step();
+        m_state.pulse[i].step();
       }
-      m_noise.step();
+      m_state.noise.step();
     }
-    m_triangle.step();
-    m_dmc.step(m_cpu);
+    m_state.triangle.step();
+    m_state.dmc.step(m_cpu);
 
-    if ((m_cycles++ % (CPU6502::BASE_CLOCK_FREQUENCY / BASE_FCNT_FREQUENCY)) == 0) {
+    if ((m_state.cycles++ % (CPU6502::BASE_CLOCK_FREQUENCY / BASE_FCNT_FREQUENCY)) == 0) {
       const auto envelope = [&]() {
-        m_triangle.clock();
+        m_state.triangle.clock();
         for (uint8_t i = 0; i < 2; ++i) {
-          m_pulse[i].clockEnvelope();
+          m_state.pulse[i].clockEnvelope();
         }
       };
       const auto length = [&]() {
-        m_triangle.advanceLength(), m_noise.advanceLength();
+        m_state.triangle.advanceLength(), m_state.noise.advanceLength();
         for (uint8_t i = 0; i < 2; ++i) {
-          m_pulse[i].clock();
+          m_state.pulse[i].clock();
         }
       };
       const auto irq = [&]() {
-        if (m_irqInhibit) return;
-        m_frameIrq = true;
+        if (m_state.irqInhibit) return;
+        m_state.frameIrq = true;
         m_cpu.triggerIRQ();
       };
       const auto special = [&]() {
-        if (m_5stepSequence) return;
+        if (m_state.extendedState) return;
         irq(), length(), envelope();
       };
-      switch (m_step++ % (m_5stepSequence ? 5 : 4)) {
+      switch (m_state.step++ % (m_state.extendedState ? 5 : 4)) {
         case 0: envelope(); break;
         case 1: length(), envelope(); break;
         case 2: envelope(); break;
@@ -370,17 +370,17 @@ void APU::step(uint8_t cycles) {
       }
     }
 
-    if (m_outEnabled && m_handler) {
+    if (m_state.outEnabled && m_handler) {
       auto const currSample = mixChannels();
 
-      m_sampleAccumulator += currSample;
-      m_sampleCount += 1;
+      m_state.sampleAccumulator += currSample;
+      m_state.sampleCount += 1;
 
-      if ((m_cycleAccumulator += 1.0) >= m_cyclesPerSample) {
-        m_handler(m_sampleAccumulator / m_sampleCount);
-        m_sampleAccumulator = 0.0f;
-        m_sampleCount       = 0;
-        m_cycleAccumulator -= m_cyclesPerSample;
+      if ((m_state.cycleAccumulator += 1.0) >= m_state.cyclesPerSample) {
+        m_handler(m_state.sampleAccumulator / m_state.sampleCount);
+        m_state.sampleAccumulator = 0.0f;
+        m_state.sampleCount       = 0;
+        m_state.cycleAccumulator -= m_state.cyclesPerSample;
       }
     }
   }

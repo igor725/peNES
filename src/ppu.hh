@@ -21,8 +21,38 @@ class PPU: public MMU {
   }};
 
   public:
+  struct PPUState {
+    struct {
+      uint8_t C = 0;
+      uint8_t M = 0;
+      uint8_t S = 0;
+    } regs;
+
+    uint16_t shiftHigh      = 0;
+    uint16_t shiftLow       = 0;
+    uint16_t tramAddr       = 0;
+    uint16_t vramAddr       = 0;
+    uint16_t cycle          = 0;
+    uint16_t scanline       = 0;
+    uint16_t bgAttr         = 0;
+    uint8_t  fineX          = 0;
+    uint8_t  oamAddr        = 0;
+    uint8_t  addrLatch      = 0;
+    uint8_t  readBuffer     = 0;
+    uint8_t  bgTile         = 0;
+    uint8_t  bgLow          = 0;
+    uint8_t  bgHigh         = 0;
+    uint8_t  spritesPerScan = 0;
+    uint32_t shiftAt        = 0;
+
+    uint8_t vram[2048];
+    uint8_t palette[32];
+    uint8_t oam[256];
+  };
+
   template <typename P>
   struct Frame {
+
     std::span<P const> pixels;
     uint32_t           pitch;
 
@@ -50,6 +80,10 @@ class PPU: public MMU {
   void setRegionMode(RegionMode rg) { m_timing = &REGION_TIMINGS[static_cast<uint8_t>(rg)]; }
 
   void setVerticalMirroring() { m_mirrorVertically = true; }
+
+  PPUState dumpState() const { return m_state; }
+
+  void restoreState(PPUState&& state) { m_state = std::move(state); }
 
   protected:
   uint16_t getNametableMirroringOffset(uint16_t address);
@@ -88,38 +122,12 @@ class PPU: public MMU {
 
   Palette m_colorPalette;
 
-  struct {
-    uint8_t C = 0;
-    uint8_t M = 0;
-    uint8_t S = 0;
-  } m_regs;
-
-  uint16_t m_shiftHigh      = 0;
-  uint16_t m_shiftLow       = 0;
-  uint16_t m_tramAddr       = 0;
-  uint16_t m_vramAddr       = 0;
-  uint16_t m_cycle          = 0;
-  uint16_t m_scanline       = 0;
-  uint16_t m_bgAttr         = 0;
-  uint8_t  m_fineX          = 0;
-  uint8_t  m_oamAddr        = 0;
-  uint8_t  m_addrLatch      = 0;
-  uint8_t  m_readBuffer     = 0;
-  uint8_t  m_bgTile         = 0;
-  uint8_t  m_bgLow          = 0;
-  uint8_t  m_bgHigh         = 0;
-  uint8_t  m_spritesPerScan = 0;
-  uint32_t m_shiftAt        = 0;
+  PPUState m_state;
 
   bool m_frameReady       = false;
   bool m_mirrorVertically = false;
 
   uint32_t m_frameBuffer[256 * 240];
-  uint8_t  m_vram[2048];
-  uint8_t  m_palette[32];
-  uint8_t  m_oam[256];
 
   RegionTiming const* m_timing = &REGION_TIMINGS[0];
-
-  std::span<uint8_t> m_chrRam;
 };
