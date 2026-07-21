@@ -56,15 +56,13 @@ class MMC3: public Mapper {
 
   uint8_t ppuOperation(bool isWrite, uint16_t addr, uint8_t value) final {
     if (m_cartridge->hdr.getCharNum() == 0) {
-      auto const chrRam = prepareCHRMemory(0x2000);
+      auto const chrRam = prepareCHRMemory(m_cartridge->hdr.getCharRamSize());
       if (isWrite) return chrRam[addr & 0x1FFF] = value;
       return chrRam[addr & 0x1FFF];
     }
 
-    if (isWrite) throw;
-
-    uint16_t bankNumber = addr / 0x0400;
-    uint16_t bankOffset = addr % 0x0400;
+    uint16_t const bankNumber = addr / 0x0400;
+    uint16_t const bankOffset = addr % 0x0400;
 
     return m_cartridge->data[m_charBaseOff + m_chrBanks[bankNumber] + bankOffset];
   }

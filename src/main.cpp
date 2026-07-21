@@ -19,6 +19,10 @@
 #include <stop_token>
 #include <thread>
 
+#if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+#error "Unsupported byte order"
+#endif
+
 struct Console {
   using Clock = std::chrono::steady_clock;
   using Delta = std::chrono::duration<double>;

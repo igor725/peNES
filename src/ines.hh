@@ -98,6 +98,16 @@ class iNES {
         return std::max(flagsEx.nes1.prgRamSize, (uint8_t)1) * 8192;
       }
 
+      inline uint32_t getCharRamSize() const {
+        if (isNes2()) {
+          uint32_t const volatileRam = flagsEx.nes2.charRamShifts ? (64 << flagsEx.nes2.charRamShifts) : 0;
+          uint32_t const nvRam       = flagsEx.nes2.charNvramShifts ? (64 << flagsEx.nes2.charNvramShifts) : 0;
+          return volatileRam + nvRam;
+        }
+
+        return 8192;
+      }
+
       inline uint16_t getMapperId() const { return (isNes2() ? flagsEx.nes2.mapperHighest << 8 : 0) | (flags.mapperHigh << 4) | flags.mapperLow; }
 
       inline Region getRegion() const { return isNes2() ? flagsEx.nes2.region : (flagsEx.nes1.flipMode ? Region::PAL : Region::NTSC); }

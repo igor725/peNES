@@ -35,7 +35,6 @@ class CNROM: public Mapper {
 
   uint8_t ppuOperation(bool isWrite, uint16_t addr, uint8_t value) final {
     if (isWrite || m_cartridge->hdr.getCharNum() == 0) throw;
-    addr &= 0x1FFFF;
     return m_cartridge->data[m_charBaseOff + m_chrOff + (addr & 0x1FFF)];
   }
 

@@ -20,7 +20,7 @@ std::span<uint8_t> Mapper::preparePRGMemory(size_t size) {
 }
 
 uint8_t Mapper::handleBattery(bool isWrite, uint16_t addr, uint8_t value) {
-  auto const memory = preparePRGMemory(0x2000);
+  auto const memory = preparePRGMemory(m_cartridge->hdr.getPrgRamSize());
   if (isWrite) return memory[addr] = value;
   return memory[addr];
 }

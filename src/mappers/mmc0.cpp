@@ -19,12 +19,11 @@ class MMC0: public Mapper {
   uint8_t ppuOperation(bool isWrite, uint16_t addr, uint8_t value) final {
     addr &= 0x1FFF;
     if (m_cartridge->hdr.getCharNum() == 0) {
-      auto const chrRam = prepareCHRMemory(0x2000);
+      auto const chrRam = prepareCHRMemory(m_cartridge->hdr.getCharRamSize());
       if (isWrite) return chrRam[addr] = value;
       return chrRam[addr];
     }
 
-    if (isWrite) throw;
     return m_cartridge->data[m_charBaseOff + addr];
   }
 
