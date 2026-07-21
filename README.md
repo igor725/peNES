@@ -3,26 +3,36 @@ Yet another NES emulator written in C++23.
 
 The initial plan was to get it going within one day which I did successfully. This is my second attempt writing a NES emulator (the first one was years ago in Lua and source code is kind of lost in time). The goal was to create a working emulator in one day or less which I somewhat completed: the third commit that was made within one day was actually able to run [2048.nes](https://github.com/nwagyu/nofrendo/blob/7973653c049f5d0d19b33f9068639fcafd350059/src/2048.nes). This project was created just to have some fun and to have a handy lightweight tool with extensive control over 6502's execution flow with pretty basic programmer-friendly debugging interfaces.
 
-> [!WARNING]  
+> [!WARNING]
 > The PPU is currently suffering around the same issues as my first emulator did because I still have to read a lot of those documentations on it to actually fix the thing.
-> Also the APU is partially implemented but it is inaccurate which could cause numerous issues in synchronization and applications execution in general. CPU is egregiously
-> inaccurate, too. It has a lot of lingering bugs yet still manages to run some games like SMB and Duck Hunt. On top of that some CPU instructions are completely missing
-> since I was adding them on as games were executing them. All the official instructions are already implemented, but illegal ones are still big TODO.
+> Also the APU is implemented but it is kind of inaccurate which could cause numerous issues in synchronization and applications execution in general. There's still a lot
+> of lingering bugs yet the emulator still manages to run some games like SMB, Darkwing Duck, The Legend of Zelda, Duck Hunt and most likely way more than that. Additionally
+> my CPU completely passes NEStest and 6502 timings tests, the emulator still struggless with 100thcoin's accuracy test but it passes 80/143 tests so far at the moment of me
+> writing this warning.
 
 ## Screenshots
 <details>
   <summary>Click to expand</summary>
 	<img src="./screenshots/scr1.png">
 	<img src="./screenshots/scr2.png">
+	<img src="./screenshots/scr3.png">
+	<img src="./screenshots/scr4.png">
+	<img src="./screenshots/scr5.png">
 </details>
 
 ## Implemented mappers
+
+> [!NOTE]
+> Note that "Implemented" doesn't mean "works completely flawlessly in all scenarios", a lot of games might>
+> straight up break because of missing or incorrectly implemented functionality inside those mappers.
+
 - [x] MMC0
 - [x] MMC1
 - [ ] MMC2
-- [ ] MMC3
+- [x] MMC3
 - [ ] MMC4
 - [ ] MMC5
+- [x] CNROM
 
 Currently any attempt to run other mappers will result in exception.
 
