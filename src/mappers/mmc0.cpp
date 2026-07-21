@@ -8,12 +8,7 @@ class MMC0: public Mapper {
   MMC0(iNES* c): Mapper(c) {}
 
   uint8_t cpuOperation(bool /* isWrite */, uint16_t addr, uint8_t /* value */) final { // We're ignoring writes here completely
-    if (addr >= 0x8000 /* Start of PRG */) {
-      addr &= m_cartridge->hdr.getProgNum() == 1 ? (PROG_BANK_SIZE - 1) : 0x7FFF;
-      return m_cartridge->data[m_progBaseOff + addr];
-    }
-
-    throw;
+    return m_cartridge->data[m_progBaseOff + (addr & (m_cartridge->hdr.getProgNum() == 1 ? (PROG_BANK_SIZE - 1) : 0x7FFF))];
   }
 
   uint8_t ppuOperation(bool isWrite, uint16_t addr, uint8_t value) final {

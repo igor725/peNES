@@ -12,43 +12,33 @@ class MMC1: public Mapper {
     if (addr >= 0x6000 && addr <= 0x7FFF) return handleBattery(isWrite, addr & 0x1FFF, value);
 
     if (isWrite) {
-      if (addr >= 0x8000) {
-        if (value & 0x80) {
+      if (value & 0x80) {
+        m_shiftReg   = 0;
+        m_shiftCount = 0;
+        m_ctlReg |= 0x0C;
+        updateOffsets();
+      } else {
+        m_shiftReg |= ((value & 1) << m_shiftCount);
+        m_shiftCount++;
+
+        if (m_shiftCount == 5) {
+          uint8_t target = (addr >> 13) & 0x03;
+          switch (target) {
+            case 0: m_ctlReg = m_shiftReg; break;
+            case 1: m_charBank0 = m_shiftReg; break;
+            case 2: m_charBank1 = m_shiftReg; break;
+            case 3: m_prgBank = m_shiftReg; break;
+          }
           m_shiftReg   = 0;
           m_shiftCount = 0;
-          m_ctlReg |= 0x0C;
           updateOffsets();
-        } else {
-          m_shiftReg |= ((value & 1) << m_shiftCount);
-          m_shiftCount++;
-
-          if (m_shiftCount == 5) {
-            uint8_t target = (addr >> 13) & 0x03;
-            switch (target) {
-              case 0: m_ctlReg = m_shiftReg; break;
-              case 1: m_charBank0 = m_shiftReg; break;
-              case 2: m_charBank1 = m_shiftReg; break;
-              case 3: m_prgBank = m_shiftReg; break;
-            }
-            m_shiftReg   = 0;
-            m_shiftCount = 0;
-            updateOffsets();
-          }
         }
-
-        return value;
       }
 
-      throw;
+      return value;
     }
 
-    if (addr >= 0x8000 && addr <= 0xBFFF) {
-      return m_cartridge->data[m_progBaseOff + m_prgOff0 + (addr & 0x3FFF)];
-    } else if (addr >= 0xC000 && addr <= 0xFFFF) {
-      return m_cartridge->data[m_progBaseOff + m_prgOff1 + (addr & 0x3FFF)];
-    }
-
-    throw;
+    return m_cartridge->data[m_progBaseOff + m_prgOff[(addr & 0x7FFF) / PROG_BANK_SIZE] + (addr & 0x3FFF)];
   }
 
   uint8_t ppuOperation(bool isWrite, uint16_t addr, uint8_t value) final {
@@ -72,11 +62,8 @@ class MMC1: public Mapper {
   uint8_t m_charBank1 = 0;
   uint8_t m_prgBank   = 0;
 
-  uint32_t                m_prgOff0 = 0;
-  uint32_t                m_prgOff1 = 0;
-  std::array<uint32_t, 2> m_chrOff  = {0x0000, 0x1000};
-
-  uint8_t m_memory[8192];
+  std::array<uint32_t, 2> m_prgOff = {0x0000, 0x0000};
+  std::array<uint32_t, 2> m_chrOff = {0x0000, 0x1000};
 
   void updateOffsets() {
     if (((m_ctlReg >> 4) & 0x01) /* chrMode */ == 0) {
@@ -93,16 +80,16 @@ class MMC1: public Mapper {
     switch ((m_ctlReg >> 2) & 0x03) {
       case 0x00:
       case 0x01: {
-        m_prgOff0 = (currBank & 0xFE) * 0x4000;
-        m_prgOff1 = ((currBank & 0xFE) + 1) * 0x4000;
+        m_prgOff[0] = (currBank & 0xFE) * 0x4000;
+        m_prgOff[1] = ((currBank & 0xFE) + 1) * 0x4000;
       } break;
       case 0x02: {
-        m_prgOff0 = 0;
-        m_prgOff1 = currBank * 0x4000;
+        m_prgOff[0] = 0;
+        m_prgOff[1] = currBank * 0x4000;
       } break;
       case 0x03: {
-        m_prgOff0 = currBank * 0x4000;
-        m_prgOff1 = (m_cartridge->hdr.getProgNum() - 1) * 0x4000;
+        m_prgOff[0] = currBank * 0x4000;
+        m_prgOff[1] = (m_cartridge->hdr.getProgNum() - 1) * 0x4000;
       } break;
     }
   }

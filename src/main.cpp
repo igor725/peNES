@@ -239,6 +239,7 @@ struct Console {
     _apu.onData(_batchSize * 2, [&](std::span<float const> sample) { SDL_PutAudioStreamData(_stream, sample.data(), sample.size_bytes()); });
 #endif
 
+    _ppu.setMirroring(_cartridge->hdr.isVerticalMirror());
     _cpu.reset();
   }
 

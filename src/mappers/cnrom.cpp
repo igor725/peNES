@@ -12,25 +12,11 @@ class CNROM: public Mapper {
     if (addr >= 0x6000 && addr <= 0x7FFF) return handleBattery(isWrite, addr & 0x1FFF, value);
 
     if (isWrite) {
-      if (addr >= 0x8000) {
-        setBank(value);
-        return value;
-      }
-
-      throw;
+      setBank(value);
+      return value;
     }
 
-    if (addr >= 0x8000 && addr <= 0xFFFF) {
-      uint32_t prgSize = m_cartridge->hdr.getProgNum() * PROG_BANK_SIZE;
-
-      if (prgSize == 16384) {
-        return m_cartridge->data[m_progBaseOff + (addr & 0x3FFF)];
-      } else {
-        return m_cartridge->data[m_progBaseOff + (addr - 0x8000)];
-      }
-    }
-
-    throw;
+    return m_cartridge->data[m_progBaseOff + (addr & (m_cartridge->hdr.getProgNum() == 1 ? (PROG_BANK_SIZE - 1) : 0x7FFF))];
   }
 
   uint8_t ppuOperation(bool isWrite, uint16_t addr, uint8_t value) final {
