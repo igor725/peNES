@@ -23,7 +23,7 @@ struct Console {
   using Clock = std::chrono::steady_clock;
   using Delta = std::chrono::duration<double>;
 
-  static constexpr auto TARGET_FRAMETIME = Delta(1.0 / 60.0988);
+  static constexpr auto TARGET_FRAMETIME = Delta(1.0 / 62.0988);
 
   union PadState {
     struct {
@@ -88,12 +88,27 @@ struct Console {
 #endif
 
     _thread = std::jthread([this](std::stop_token stop) {
-      constexpr double AVG_ALPHA = 0.1;
+      constexpr double AVG_ALPHA             = 0.1;
+      constexpr double CYCLES_DEPT_THRESHOLD = (double)CPU6502::BASE_CLOCK_FREQUENCY * 0.20 /* 20% speed loss is a big deal */;
 
       auto lastTime = Clock::now();
 
+      uint16_t resetDept = 0;
       while (!stop.stop_requested()) {
-        while (_cyclesDebt > 0 && !_ppu.isFrameReady() && !stop.stop_requested()) {
+        auto const pred = [&] -> bool {
+          if (stop.stop_requested()) return false;
+          if (_cyclesDebt <= 0) return false;
+          if (_cyclesDebt > CYCLES_DEPT_THRESHOLD) {
+            if (++resetDept >= 2048) /* We got systematic performance loss on our hands, bad-bad */ {
+              SDL_ClearAudioStream(_stream);
+              _cyclesDebt = 0, resetDept = 0;
+            }
+            return true;
+          }
+          resetDept = 0;
+          return !_ppu.isFrameReady();
+        };
+        while (pred()) {
           auto const cyclesMade = _cpu.step();
           if (cyclesMade >= 1) {
             _apu.step(cyclesMade);
@@ -214,7 +229,7 @@ struct Console {
   }
 
   PPU::Frame<uint32_t> step(std::unique_lock<std::mutex> const& lock, Delta time) {
-    _cyclesDebt += CPU6502::BASE_CLOCK_FREQUENCY * time.count();
+    _cyclesDebt += CPU6502::BASE_CLOCK_FREQUENCY * std::min(time.count(), 20.0);
     if (!lock.owns_lock() || !_ppu.isFrameReady()) return {};
     return _ppu.getFrame();
   }

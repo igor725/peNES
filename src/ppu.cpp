@@ -279,6 +279,8 @@ void PPU::step() {
 }
 
 void PPU::run(uint8_t cycles) {
+  m_frameReady = false; // Drop previous frame immediately if it was there, main loop ignored it
+
   for (uint8_t i = 0; i < cycles; ++i) {
     step();
   }
