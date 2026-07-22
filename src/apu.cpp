@@ -4,6 +4,10 @@
 
 #include <cstdint>
 
+#if PENES_MICROPROFILE
+#include <microprofile.h>
+#endif
+
 static const uint8_t LENGTH_TABLE[32] = {10, 254, 20, 2,  40, 4,  80, 6,  160, 8,  60, 10, 14, 12, 26, 14,
                                          12, 16,  24, 18, 48, 20, 96, 22, 192, 24, 72, 26, 16, 28, 32, 30};
 
@@ -329,6 +333,9 @@ float APU::mixChannels() const {
 }
 
 void APU::step(uint8_t cycles) {
+#if PENES_MICROPROFILE
+  MICROPROFILE_SCOPEI("NES", "APU Step", MP_LIGHTPINK);
+#endif
   while (cycles--) {
     if (m_state.cycles % 2 == 0) {
       for (uint8_t i = 0; i < 2; ++i) {

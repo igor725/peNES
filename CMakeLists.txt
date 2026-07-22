@@ -7,6 +7,7 @@ option(PENES_ENABLE_ALL_WARNINGS "Show all warnings (except useless ones)" FALSE
 option(PENES_ENABLE_HEADLESS "Headless mode, no graphics or SDL whatsoever (useful for CPU debugging)" FALSE)
 option(PENES_ENABLE_ASAN "Enable address santizier" FALSE)
 option(PENES_ENABLE_MSAN "Enable memory santizier" FALSE)
+option(PENES_MICROPROFILE "Enable microprofile" FALSE)
 
 add_library(peNES_opts INTERFACE)
 
@@ -42,6 +43,7 @@ else()
   set(SDL_LOCALE OFF CACHE BOOL "" FORCE)
   set(SDL_DIALOG OFF CACHE BOOL "" FORCE)
   set(SDL_TRAY OFF CACHE BOOL "" FORCE)
+  set(SDL_DLOPEN_NOTES OFF CACHE BOOL "" FORCE)
   set(SDL_X11_XSHAPE OFF CACHE BOOL "" FORCE)
   set(SDL_X11_XTEST OFF CACHE BOOL "" FORCE)
   set(SDL_X11_XDBE OFF CACHE BOOL "" FORCE)
@@ -80,4 +82,16 @@ endif()
 
 if(PENES_ENABLE_ALL_WARNINGS)
   target_compile_options(peNES_opts INTERFACE -Wall -Wextra -Wshadow -Wpedantic -Wformat=2 -Wuninitialized -Wno-c99-extensions -Wno-gnu-anonymous-struct)
+endif()
+
+if(PENES_MICROPROFILE)
+  FetchContent_Declare(
+    microprofile
+    GIT_REPOSITORY https://github.com/jonasmr/microprofile
+    GIT_TAG "v4.0"
+  )
+  FetchContent_MakeAvailable(microprofile)
+
+  target_link_libraries(peNES_opts INTERFACE microprofile)
+  target_compile_definitions(peNES_opts INTERFACE PENES_MICROPROFILE)
 endif()

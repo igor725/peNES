@@ -4,6 +4,10 @@
 
 #include <cstdint>
 
+#if PENES_MICROPROFILE
+#include <microprofile.h>
+#endif
+
 PPU::PPU(CPU6502& c): m_cpu(c) {}
 
 PPU::~PPU() {}
@@ -280,6 +284,10 @@ void PPU::step() {
 }
 
 void PPU::run(uint8_t cycles) {
+#if PENES_MICROPROFILE
+  MICROPROFILE_SCOPEI("NES", "PPU Run", MP_DEEPSKYBLUE);
+#endif
+
   m_frameReady = false; // Drop previous frame immediately if it was there, main loop ignored it
 
   for (uint8_t i = 0; i < cycles; ++i) {

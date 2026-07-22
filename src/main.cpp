@@ -19,6 +19,10 @@
 #include <stop_token>
 #include <thread>
 
+#if PENES_MICROPROFILE
+#include <microprofile.h>
+#endif
+
 #if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
 #error "Unsupported byte order"
 #endif
@@ -184,6 +188,9 @@ struct Console {
 
   std::jthread setupThread() {
     return std::jthread([this](std::stop_token stop) {
+#if PENES_MICROPROFILE
+      MicroProfileOnThreadCreate("NES processor");
+#endif
       constexpr double AVG_ALPHA             = 0.1;
       constexpr double CYCLES_DEPT_THRESHOLD = (double)CPU6502::BASE_CLOCK_FREQUENCY * 0.20 /* 20% speed loss is a big deal */;
 
@@ -191,6 +198,9 @@ struct Console {
 
       uint16_t resetDept = 0;
       while (!stop.stop_requested()) {
+#if PENES_MICROPROFILE
+        MICROPROFILE_SCOPEI("NES", "Tick", MP_YELLOW);
+#endif
         auto const pred = [&] -> bool {
           if (stop.stop_requested()) return false;
           if (_cyclesDebt <= 0) return false;
@@ -214,6 +224,9 @@ struct Console {
         }
 
         if (_ppu.isFrameReady()) {
+#if PENES_MICROPROFILE
+          MICROPROFILE_SCOPEI("NES", "Frame Push", MP_MAGENTA);
+#endif
           auto const currentTime = Clock::now();
 
           if (currentTime > _nextCheck) {
@@ -227,7 +240,13 @@ struct Console {
           }
 
           std::unique_lock lock(_sync);
-          _wait.wait(lock, [&] { return !_ppu.isFrameReady() || stop.stop_requested(); });
+
+          {
+#if PENES_MICROPROFILE
+            MICROPROFILE_SCOPEI("NES", "Pull Wait", MP_DEEPSKYBLUE);
+#endif
+            _wait.wait(lock, [&] { return !_ppu.isFrameReady() || stop.stop_requested(); });
+          }
 
           lastTime = currentTime;
           _ticks += 1;
@@ -235,6 +254,9 @@ struct Console {
           std::this_thread::yield();
         }
       }
+#if PENES_MICROPROFILE
+      MicroProfileOnThreadExit();
+#endif
     });
   }
 
@@ -257,6 +279,11 @@ struct Console {
 };
 
 int32_t main(int32_t argc, char* argv[]) {
+#if PENES_MICROPROFILE
+  MicroProfileInit();
+  std::cerr << "Running profiler on http://localhost:" << MicroProfileWebServerPort() << std::endl;
+  MicroProfileOnThreadCreate("Main");
+#endif
   CmdlineParser args;
 
   try {
@@ -314,6 +341,9 @@ int32_t main(int32_t argc, char* argv[]) {
 
   bool stopped = false;
   while (!stopped) {
+#if PENES_MICROPROFILE
+    MICROPROFILE_SCOPEI("Main", "Tick", MP_GREEN);
+#endif
     auto const currentTime = Console::Clock::now();
     auto const delta       = currentTime - lastTime;
 
@@ -382,14 +412,26 @@ int32_t main(int32_t argc, char* argv[]) {
 
       if (lock.owns_lock()) nes._padBtns = currPadState;
       if (auto frame = nes.step(lock, delta); !frame.empty()) {
+#if PENES_MICROPROFILE
+        MICROPROFILE_SCOPEI("Main", "Frame Pull", MP_BLACK);
+#endif
+        SDL_RenderClear(rend);
         SDL_UpdateTexture(tex, nullptr, frame.data(), frame.pitch_bytes());
-        nes._wait.notify_one();
       }
+
+      nes._wait.notify_one();
     }
 
-    SDL_RenderClear(rend);
-    SDL_RenderTexture(rend, tex, nullptr, nullptr);
-    SDL_RenderPresent(rend);
+    {
+#if PENES_MICROPROFILE
+      MICROPROFILE_SCOPEI("Main", "Present", MP_BISQUE);
+#endif
+      SDL_RenderTexture(rend, tex, nullptr, nullptr);
+      SDL_RenderPresent(rend);
+    }
+#if PENES_MICROPROFILE
+    MicroProfileFlip(nullptr);
+#endif
 
     lastTime = currentTime;
   }
@@ -404,5 +446,8 @@ int32_t main(int32_t argc, char* argv[]) {
     nes.step(nes.tryLock(), Console::TARGET_FRAMETIME);
 #endif
 
+#if PENES_MICROPROFILE
+  MicroProfileOnThreadExit();
+#endif
   return 0;
 }

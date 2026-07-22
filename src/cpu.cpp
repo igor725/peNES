@@ -5,6 +5,10 @@
 #include <format>
 #include <iterator>
 
+#if PENES_MICROPROFILE
+#include <microprofile.h>
+#endif
+
 class UnhandledInstruction: public std::exception {
   public:
   UnhandledInstruction() {}
@@ -1263,6 +1267,9 @@ uint8_t CPU6502::handleIllegal(InstructionStatus& status) { /* All instructions 
 }
 
 uint8_t CPU6502::step() {
+#if PENES_MICROPROFILE
+  MICROPROFILE_SCOPEI("NES", "CPU Step", MP_DARKGREY);
+#endif
   if (m_state.nmiTriggered) {
     m_state.nmiTriggered = false;
     interrupt(0xFFFA, false);
