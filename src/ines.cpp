@@ -18,6 +18,7 @@ CartridgeException::CartridgeException(Type type, int32_t additionalData) {
     case Type::IncompleteFile: m_what = "Incomplete or damaged dump"; break;
     case Type::ValidateFail: m_what = "Faulty or unsupported cartridge dump"; break;
     case Type::UnsupportedMapper: m_what = "Unsupported mapper: " + std::to_string(additionalData); break;
+    case Type::UnsupportedSubMapper: m_what = "Unsupported submapper: " + std::to_string(additionalData); break;
     case Type::PALDump: m_what = "PAL cartridges are unsupported atm"; break;
   }
 }
@@ -73,16 +74,10 @@ void iNES::performSetup(void* file, size_t size) {
       throw CartridgeException(CartridgeException::Type::PALDump);
   }
 
-  switch (auto m = m_file->hdr.getMapperId()) {
+  switch (auto const m = m_file->hdr.getMapperId()) {
     case 0x0000: m_mapper = createMMC0(this); break;
-
-    case 0x0001:
-    case 0x0069:
-    case 0x009b: m_mapper = createMMC1(this); break;
-
-    case 0x0003:
-    case 0x00b9: m_mapper = createCNROM(this); break;
-
+    case 0x0001: m_mapper = createMMC1(this); break;
+    case 0x0003: m_mapper = createCNROM(this); break;
     case 0x0004: m_mapper = createMMC3(this); break;
 
     default: throw CartridgeException(CartridgeException::Type::UnsupportedMapper, m);

@@ -17,6 +17,7 @@ class CartridgeException: public std::exception {
     IncompleteFile,
     ValidateFail,
     UnsupportedMapper,
+    UnsupportedSubMapper,
     PALDump,
   };
 
@@ -109,6 +110,8 @@ class iNES {
       }
 
       inline uint16_t getMapperId() const { return (isNes2() ? flagsEx.nes2.mapperHighest << 8 : 0) | (flags.mapperHigh << 4) | flags.mapperLow; }
+
+      inline uint8_t getSubMapperId() const { return isNes2() ? flagsEx.nes2.subMapper : 0; }
 
       inline Region getRegion() const { return isNes2() ? flagsEx.nes2.region : (flagsEx.nes1.flipMode ? Region::PAL : Region::NTSC); }
 

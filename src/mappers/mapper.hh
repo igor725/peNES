@@ -15,7 +15,7 @@ class Mapper {
   static constexpr size_t PROG_BANK_SIZE     = 0x4000;
   static constexpr size_t CHAR_BANK_SIZE     = 0x2000;
 
-  Mapper(iNES* c);
+  Mapper(iNES* c, bool subMappersAware = false);
 
   virtual ~Mapper() = default;
 
