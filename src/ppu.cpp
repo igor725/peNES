@@ -36,7 +36,8 @@ uint8_t PPU::readInternal(uint16_t addr) {
   } else if (addr >= 0x3F00 && addr <= 0x3FFF) {
     uint16_t palette_address = (addr - 0x3F00) & 0x001F;
     if ((palette_address & 0x0003) == 0 && (palette_address & 0x0010)) palette_address &= 0x000F;
-    return m_state.palette[palette_address];
+    auto const paletteMask = m_state.regs.M & MASK_GREYSCALE ? 0b00110000 : 0b00111111;
+    return (m_state.palette[palette_address] & paletteMask) | (m_state.decay & 0xC0);
   }
 
   return 0;
@@ -72,25 +73,37 @@ std::optional<uint8_t> PPU::cpuRead(uint16_t addr) {
   uint8_t data;
 
   switch ((addr - 0x2000) & 0x07) {
+    case 0x00: data = m_state.decay; break;
     case 0x02 /* PPUSTATUS */: {
-      data = m_state.regs.S;
+      if constexpr (PRE_RP2C02G_BEHAVIOR) {
+        data = m_state.regs.S | (m_state.decay & 0b00011111);
+      } else {
+        m_state.decay &= 0b00011111, m_state.nextDecay = CPU6502::BASE_CLOCK_FREQUENCY;
+        data = m_state.regs.S | m_state.decay;
+      }
       m_state.regs.S &= ~STATUS_VBLANK;
-      m_state.addrLatch = 0;
+      m_state.writeLatch = 0;
     } break;
-    case 0x04 /* OAMDATA */: data = m_state.oam[m_state.oamAddr]; break;
+    case 0x04 /* OAMDATA */: {
+      data = m_state.oam[m_state.oamAddr] & (PRE_RP2C02G_BEHAVIOR ? 0b11100001 : 0b11111111); // According to AccuracyCoin this is a pre-PPU rev.G behavior
+      if (m_state.oamAddr > 0 && ((m_state.oamAddr & 1) == 0)) {
+        m_state.decay = 0, m_state.nextDecay = CPU6502::BASE_CLOCK_FREQUENCY;
+      }
+    } break;
     case 0x07 /* PPUDATA */: {
-      data               = m_state.readBuffer;
-      m_state.readBuffer = readInternal(m_state.vramAddr);
-
-      if (m_state.vramAddr >= 0x3F00) {
+      if (m_state.vramAddr >= 0x3F00) /* Palette RAM */ {
         data               = readInternal(m_state.vramAddr);
         m_state.readBuffer = readInternal(m_state.vramAddr - 0x1000);
+      } else {
+        data               = m_state.readBuffer;
+        m_state.readBuffer = readInternal(m_state.vramAddr);
       }
 
       m_state.vramAddr += (m_state.regs.C & CTRL_VRAM_INCREMENT) ? 32 : 1;
+      m_state.decay = data, m_state.nextDecay = CPU6502::BASE_CLOCK_FREQUENCY;
     } break;
 
-    default: return {};
+    default: return m_state.decay;
   }
 
   return data;
@@ -123,7 +136,7 @@ std::optional<uint8_t> PPU::cpuWrite(uint16_t addr, uint8_t value) {
     case 0x04 /*  PPUDATA */: m_state.oam[m_state.oamAddr++] = value; break;
 
     case 0x05 /* PPUSCROLL */: {
-      if (m_state.addrLatch == 0) {
+      if (m_state.writeLatch == 0) {
         m_state.fineX    = value & 0x07;
         m_state.tramAddr = (m_state.tramAddr & 0xFFE0) | (value >> 3);
       } else {
@@ -131,18 +144,18 @@ std::optional<uint8_t> PPU::cpuWrite(uint16_t addr, uint8_t value) {
         m_state.tramAddr = (m_state.tramAddr & 0xFC1F) | ((value & 0xF8) << 2);
       }
 
-      m_state.addrLatch ^= 1;
+      m_state.writeLatch ^= 1;
     } break;
 
     case 0x06 /* PPUADDR */: {
-      if (m_state.addrLatch == 0) {
+      if (m_state.writeLatch == 0) {
         m_state.tramAddr = (m_state.tramAddr & 0x80FF) | ((value & 0x3F) << 8);
       } else {
         m_state.tramAddr = (m_state.tramAddr & 0xFF00) | value;
         m_state.vramAddr = m_state.tramAddr;
       }
 
-      m_state.addrLatch ^= 1;
+      m_state.writeLatch ^= 1;
     } break;
 
     case 0x07 /*  PPUDATA */: {
@@ -151,10 +164,11 @@ std::optional<uint8_t> PPU::cpuWrite(uint16_t addr, uint8_t value) {
     } break;
   }
 
+  m_state.decay = value, m_state.nextDecay = CPU6502::BASE_CLOCK_FREQUENCY;
   return {};
 }
 
-void PPU::step() {
+void PPU::pixelEval() {
   if (m_state.regs.M & (MASK_DRAW_SPRITE | MASK_DRAW_BG)) {
     if (m_state.scanline < 240) {
       if (m_state.cycle <= 255 || (m_state.cycle >= 320 && m_state.cycle <= 340)) {
@@ -271,8 +285,9 @@ void PPU::step() {
       m_state.regs.S |= STATUS_VBLANK;
       if (m_state.regs.C & CTRL_GEN_NMI) m_cpu.triggerNMI();
       m_frameReady = true;
+    } else if (m_state.scanline == m_timing->preRenderScanline) {
+      m_state.regs.S = 0;
     }
-    if (m_state.scanline == m_timing->preRenderScanline) m_state.regs.S = 0;
   } else if (m_state.cycle == m_timing->hblankCycle) {
     if (m_scanlineHook) m_scanlineHook(m_state);
   }
@@ -283,15 +298,19 @@ void PPU::step() {
   }
 }
 
-void PPU::run(uint8_t cycles) {
+void PPU::step(uint8_t cycles) {
 #if PENES_MICROPROFILE
   MICROPROFILE_SCOPEI("NES", "PPU Run", MP_DEEPSKYBLUE);
 #endif
 
+  if (m_state.decay != 0 && (m_state.nextDecay -= cycles) <= 0) {
+    m_state.decay = 0;
+  }
+
   m_frameReady = false; // Drop previous frame immediately if it was there, main loop ignored it
 
-  for (uint8_t i = 0; i < cycles; ++i) {
-    step();
+  for (uint8_t i = 0; i < cycles * 3; ++i) {
+    pixelEval();
   }
 }
 

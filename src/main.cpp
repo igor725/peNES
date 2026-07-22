@@ -218,7 +218,7 @@ struct Console {
           auto const cyclesMade = _cpu.step();
           if (cyclesMade >= 1) {
             _apu.step(cyclesMade);
-            _ppu.run(cyclesMade * 3);
+            _ppu.step(cyclesMade);
           }
           _cyclesDebt -= (double)cyclesMade;
         }

@@ -1,13 +1,16 @@
 #pragma once
 
-#include "cpu.hh"
 #include "mmu.hh"
 #include "palette.hh"
 
 #include <cstdint>
 #include <span>
 
+class CPU6502;
+
 class PPU: public MMU {
+  static constexpr bool PRE_RP2C02G_BEHAVIOR = false;
+
   struct RegionTiming {
     uint16_t vblankScanline;
     uint16_t hblankCycle;
@@ -54,6 +57,15 @@ class PPU: public MMU {
       uint8_t S = 0;
     } regs;
 
+    uint8_t  fineX          = 0;
+    uint8_t  oamAddr        = 0;
+    bool     writeLatch     = 0;
+    uint8_t  readBuffer     = 0;
+    uint8_t  bgTile         = 0;
+    uint8_t  bgLow          = 0;
+    uint8_t  bgHigh         = 0;
+    uint8_t  spritesPerScan = 0;
+    uint8_t  decay          = 0;
     uint16_t shiftHigh      = 0;
     uint16_t shiftLow       = 0;
     uint16_t tramAddr       = 0;
@@ -61,15 +73,8 @@ class PPU: public MMU {
     uint16_t cycle          = 0;
     uint16_t scanline       = 0;
     uint16_t bgAttr         = 0;
-    uint8_t  fineX          = 0;
-    uint8_t  oamAddr        = 0;
-    uint8_t  addrLatch      = 0;
-    uint8_t  readBuffer     = 0;
-    uint8_t  bgTile         = 0;
-    uint8_t  bgLow          = 0;
-    uint8_t  bgHigh         = 0;
-    uint8_t  spritesPerScan = 0;
     uint32_t shiftAt        = 0;
+    int32_t  nextDecay      = 0;
 
     uint8_t vram[2048];
     uint8_t palette[32];
@@ -100,7 +105,7 @@ class PPU: public MMU {
   std::optional<uint8_t> cpuWrite(uint16_t addr, uint8_t value);
   uint8_t                dmaWrite(uint8_t value);
 
-  void            run(uint8_t cycles);
+  void            step(uint8_t cycles);
   Frame<uint32_t> getFrame();
 
   bool isFrameReady() const { return m_frameReady; };
@@ -120,7 +125,6 @@ class PPU: public MMU {
   void     writeInternal(uint16_t addr, uint8_t value);
   uint8_t  readInternal(uint16_t addr);
   void     pixelEval();
-  void     step();
 
   private:
   CPU6502& m_cpu;
