@@ -24,7 +24,7 @@ jobs:
     runs-on: ${{ matrix.config.os }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
 
       - name: Pull dependencies
         if: ${{ matrix.config.os == 'ubuntu-latest' }}
@@ -38,19 +38,13 @@ jobs:
           libegl1-mesa-dev libdbus-1-dev libibus-1.0-dev libudev-dev libthai-dev libusb-1.0-0-dev \
           libpipewire-0.3-dev libwayland-dev libdecor-0-dev liburing-dev
 
-      - name: Install Latest LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "21"
-          env: true
-
       - name: Build emulator
         run: |
           cmake -GNinja -S. -Bbuild/ -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.config.compiler_c }} -DCMAKE_CXX_COMPILER=${{ matrix.config.compiler_cxx }}
           cmake --build build/ -j4
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: peNES ${{ matrix.config.name }}
           path: ./build/peNES${{ matrix.config.extension }}
