@@ -21,7 +21,7 @@ class SkipInstruction: public std::exception {
   SkipInstruction() {}
 };
 
-CPU6502::CPU6502(): MMU() {}
+CPU6502::CPU6502(): MMU(0x2000) {}
 
 CPU6502::~CPU6502() {}
 
@@ -1320,20 +1320,20 @@ void CPU6502::triggerIRQ() {
 }
 
 uint8_t CPU6502::writeMemByte(uint16_t addr, uint8_t value) {
-  if (addr <= 0x1FFF) return m_state.ram.at(addr & 0x7ff) = value;
+  if (addr <= 0x1FFF) return m_state.ram[addr & 0x7ff] = value;
 
-  if (auto handler = findHandler(addr); isValidHandler(handler)) {
-    if (auto ret = handler->second(true, addr, value); ret.has_value()) return ret.value();
+  if (auto const han = findHandler(addr)) {
+    if (auto ret = (*han)(true, addr, value); ret.has_value()) return ret.value();
   }
 
   return value;
 }
 
 uint8_t CPU6502::readMemByte(uint16_t addr) const {
-  if (addr <= 0x1FFF) return m_state.ram.at(addr & 0x7ff);
+  if (addr <= 0x1FFF) return m_state.ram[addr & 0x7ff];
 
-  if (auto handler = findHandler(addr); isValidHandler(handler)) {
-    if (auto ret = handler->second(false, addr, 0); ret.has_value()) return ret.value();
+  if (auto const han = findHandler(addr)) {
+    if (auto ret = (*han)(false, addr, 0); ret.has_value()) return ret.value();
   }
 
   return (addr >> 8); // 100thCoin's accuracy test 2. Not sure if I want to get any further into this open bus rabbit hole

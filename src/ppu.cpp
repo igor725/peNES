@@ -8,7 +8,7 @@
 #include <microprofile.h>
 #endif
 
-PPU::PPU(CPU6502& c): m_cpu(c) {}
+PPU::PPU(CPU6502& c): MMU(0), m_cpu(c) {}
 
 PPU::~PPU() {}
 
@@ -16,16 +16,16 @@ uint16_t PPU::getNametableMirroringOffset(uint16_t addr) {
   addr &= 0x1FFF;
 
   if (m_mirrorVertically) {
-    return addr % 0x400 + (addr >= 0x400 && addr < 0x800 ? 0x400 : 0) + (addr >= 0xC00 ? 0x400 : 0);
+    return addr & 0x3FF + (addr >= 0x400 && addr < 0x800 ? 0x400 : 0) + (addr >= 0xC00 ? 0x400 : 0);
   } else {
-    return addr < 0x800 ? addr % 0x400 : (addr % 0x400) + 0x400;
+    return addr < 0x800 ? addr & 0x3FF : (addr & 0x3FF) + 0x400;
   }
 }
 
 uint8_t PPU::readInternal(uint16_t addr) {
   addr &= 0x3FFF;
-  if (auto it = findHandler(addr); isValidHandler(it)) {
-    if (auto ret = it->second(false, addr, 0); ret.has_value()) return ret.value();
+  if (auto const han = findHandler(addr)) {
+    if (auto ret = (*han)(false, addr, 0); ret.has_value()) return ret.value();
   }
 
   if (addr >= 0x2000 && addr <= 0x3EFF) {
@@ -44,8 +44,8 @@ uint8_t PPU::readInternal(uint16_t addr) {
 
 void PPU::writeInternal(uint16_t addr, uint8_t value) {
   addr &= 0x3FFF;
-  if (auto it = findHandler(addr); isValidHandler(it)) {
-    it->second(true, addr, value);
+  if (auto const han = findHandler(addr)) {
+    (*han)(true, addr, value);
     return;
   }
 
@@ -71,7 +71,7 @@ void PPU::writeInternal(uint16_t addr, uint8_t value) {
 std::optional<uint8_t> PPU::cpuRead(uint16_t addr) {
   uint8_t data;
 
-  switch ((addr - 0x2000) % 8) {
+  switch ((addr - 0x2000) & 0x07) {
     case 0x02 /* PPUSTATUS */: {
       data = m_state.regs.S;
       m_state.regs.S &= ~STATUS_VBLANK;
@@ -107,7 +107,7 @@ uint8_t PPU::dmaWrite(uint8_t value) {
 }
 
 std::optional<uint8_t> PPU::cpuWrite(uint16_t addr, uint8_t value) {
-  switch ((addr - 0x2000) % 8) {
+  switch ((addr - 0x2000) & 0x07) {
     case 0x00: /* PPUCTRL */ {
       if (m_state.regs.S & STATUS_VBLANK) /* CTRL happend inside VBLANK */ {
         if ((m_state.regs.C & CTRL_GEN_NMI) == 0 && (value & CTRL_GEN_NMI) > 0) {
@@ -273,14 +273,14 @@ void PPU::step() {
       m_frameReady = true;
     }
     if (m_state.scanline == m_timing->preRenderScanline) m_state.regs.S = 0;
+  } else if (m_state.cycle == m_timing->hblankCycle) {
+    if (m_scanlineHook) m_scanlineHook(m_state);
   }
 
   if (++m_state.cycle >= 341) {
     m_state.cycle = 0, m_state.spritesPerScan = 0;
     if (++m_state.scanline >= m_timing->totalScanlines) m_state.scanline = 0;
   }
-
-  if (m_scanlineHook) m_scanlineHook(m_state);
 }
 
 void PPU::run(uint8_t cycles) {

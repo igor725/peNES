@@ -113,7 +113,7 @@ struct Console {
     });
 
     // PPU, APU, I/O handler
-    _cpu.addRangeHandler({0x4000, 0x4017}, [&, latch = false](bool isWrite, uint16_t addr, uint8_t value) mutable -> std::optional<uint8_t> {
+    _cpu.addRangeHandler({0x4000, 0x401F}, [&, latch = false](bool isWrite, uint16_t addr, uint8_t value) mutable -> std::optional<uint8_t> {
       if (isWrite) {
         if (_apu.handleWrite(addr, value)) {
           return 0;
@@ -151,7 +151,7 @@ struct Console {
     });
 
     _ppu.setScanlineHook([&](PPU::PPUState const& state) {
-      if (state.regs.M && state.scanline < 240 && state.cycle == 260) {
+      if (state.regs.M && state.scanline < 240) {
         if (_cartridge.getMapper()->nextScanline()) _cpu.triggerIRQ();
       }
     });

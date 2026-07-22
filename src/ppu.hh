@@ -10,14 +10,15 @@
 class PPU: public MMU {
   struct RegionTiming {
     uint16_t vblankScanline;
+    uint16_t hblankCycle;
     uint16_t preRenderScanline;
     uint16_t totalScanlines;
   };
 
   static constexpr std::array<RegionTiming, 3> REGION_TIMINGS = {{
-      {241, 261, 262}, // NTSC
-      {241, 311, 312}, // PAL
-      {291, 311, 312}  // Dendy
+      {241, 260, 261, 262}, // NTSC
+      {241, 260, 311, 312}, // PAL
+      {291, 260, 311, 312}  // Dendy
   }};
 
   public:
