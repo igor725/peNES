@@ -18,7 +18,7 @@ class MMU {
   Handler const* findHandler(uint16_t address) const;
 
   private:
-  uint16_t                 m_baseOffset = 0;
-  std::array<Handler, 10>  m_handlers   = {};
+  std::array<Handler, 4>   m_handlers   = {};
   std::array<int8_t, 1792> m_buckets    = {};
+  uint16_t                 m_baseOffset = 0;
 };

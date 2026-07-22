@@ -14,7 +14,7 @@ void MMU::addRangeHandler(Interval memRange, Handler han) {
   if (((memStart & 0x1F) != 0x00) || ((memSize & 0x1F) != 0x00)) throw std::runtime_error("Misaligned memory range");
 
   int8_t hanNum = -1;
-  for (uint8_t i = 0; i < m_handlers.size(); ++i) {
+  for (int8_t i = 0; i < m_handlers.size(); ++i) {
     if (m_handlers[i] == nullptr) {
       m_handlers[i] = std::move(han);
       hanNum        = i;
