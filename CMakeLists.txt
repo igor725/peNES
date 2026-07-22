@@ -9,6 +9,14 @@ option(PENES_ENABLE_MSAN "Enable memory santizier" FALSE)
 
 add_library(peNES_opts INTERFACE)
 
+if(LINUX)
+  set(PENES_PLAT src/plat/plinux.cpp)
+elseif(WIN32)
+  set(PENES_PLAT src/plat/pwin.cpp)
+else()
+  message(FATAL_ERROR "Unsupported platfrom")
+endif()
+
 add_executable(peNES
   src/main.cpp
   src/cpu.cpp
@@ -17,6 +25,7 @@ add_executable(peNES
   src/mmu.cpp
   src/ines.cpp
   src/cpuhooks.cpp
+  ${PENES_PLAT}
 )
 target_link_libraries(peNES PRIVATE peNES_opts)
 

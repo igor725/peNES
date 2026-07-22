@@ -1,5 +1,7 @@
 #pragma once
 
+#include "plat/plat.hh"
+
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -28,7 +30,7 @@ class CartridgeException: public std::exception {
   const char* what() const noexcept override { return m_what.c_str(); }
 };
 
-class iNES {
+class iNES: public PlatImpl {
   struct File {
     struct [[gnu::packed]] Header {
       enum class Region : uint8_t { NTSC, PAL, Multi, Dendy };
@@ -147,21 +149,17 @@ class iNES {
 
   auto getMapper() const { return m_mapper.get(); }
 
-  bool checkBounds(uint32_t addr) const { return addr < m_size; }
-
   void disableValidation() { m_validation = false; }
 
-  size_t getFileSize() const { return m_size; }
+  size_t getFileSize() const { return m_mappedSize; }
 
   uint32_t resolveCPU(uint16_t addr) const;
 
   protected:
-  void performSetup(int32_t fd);
-  void performSetup(void* file, size_t size);
+  void performSetup();
 
   private:
   std::unique_ptr<Mapper> m_mapper     = {};
   File*                   m_file       = nullptr;
-  size_t                  m_size       = 0;
   bool                    m_validation = true;
 };

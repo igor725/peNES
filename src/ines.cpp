@@ -2,15 +2,10 @@
 
 #include "mappers/mapper.hh"
 
-#include <cstring>
-#include <fcntl.h>
 #include <string>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 CartridgeException::CartridgeException(int32_t errorCode) {
-  m_what = ::strerror(errorCode);
+  m_what = PlatImpl::getErrorString(errorCode);
 }
 
 CartridgeException::CartridgeException(Type type, int32_t additionalData) {
@@ -23,53 +18,13 @@ CartridgeException::CartridgeException(Type type, int32_t additionalData) {
   }
 }
 
-void iNES::performSetup(int32_t fd) {
-  struct stat sb;
-  if (::fstat(fd, &sb) == -1) {
-    auto const ecode = errno;
-    ::close(fd);
-    throw CartridgeException(ecode);
-  }
+void iNES::performSetup() {
+  if (m_mappedSize < sizeof(File::Header)) throw CartridgeException(CartridgeException::Type::IncompleteFile);
 
-  void*  region;
-  size_t currSize;
-
-  if (S_ISREG(sb.st_mode)) {
-    region = ::mmap(nullptr, sb.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
-    if (region == MAP_FAILED) throw CartridgeException(errno);
-    currSize = sb.st_size;
-    ::close(fd);
-  } else {
-    std::vector<uint8_t> holder;
-    holder.reserve(256 * 1024);
-
-    char buf[16 * 1024];
-
-    while (auto const rd = ::fread((void*)&buf, 1, sizeof(buf), stdin)) {
-      holder.insert(holder.end(), buf, buf + rd);
-    }
-
-    currSize = holder.size();
-    region   = ::mmap(nullptr, currSize, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-    std::memcpy(region, holder.data(), holder.size());
-  }
-
-  performSetup(region, currSize);
-}
-
-void iNES::performSetup(void* file, size_t size) {
-  if (size < sizeof(File::Header)) throw CartridgeException(CartridgeException::Type::IncompleteFile);
-
-  if (m_file != nullptr) {
-    ::munmap(m_file, m_size);
-    m_file = nullptr, m_size = 0;
-  }
-
-  m_file = static_cast<File*>(file);
-  m_size = size;
+  m_file = static_cast<File*>(m_mappedData);
 
   if (m_validation) {
-    if (!m_file->hdr.validate(size)) throw CartridgeException(CartridgeException::Type::ValidateFail);
+    if (!m_file->hdr.validate(m_mappedSize)) throw CartridgeException(CartridgeException::Type::ValidateFail);
     if (auto const r = m_file->hdr.getRegion(); r != File::Header::Region::NTSC && r != File::Header::Region::Multi)
       throw CartridgeException(CartridgeException::Type::PALDump);
   }
@@ -85,15 +40,25 @@ void iNES::performSetup(void* file, size_t size) {
 }
 
 void iNES::insert(std::filesystem::path const& path) {
-  int32_t const file = ::open(path.string().c_str(), O_RDONLY);
-  if (file < 0) throw CartridgeException(errno);
-  performSetup(file);
+  try {
+    unmapPlatform();
+    mapPlatformFile(path);
+    performSetup();
+  } catch (int32_t errorCode) {
+    throw CartridgeException(errorCode);
+  }
 }
 
 void iNES::piped() {
-  performSetup(0);
+  try {
+    unmapPlatform();
+    mapPlatformStdin();
+    performSetup();
+  } catch (int32_t errorCode) {
+    throw CartridgeException(errorCode);
+  }
 }
 
 iNES::~iNES() {
-  ::munmap(m_file, m_size);
+  unmapPlatform();
 }
