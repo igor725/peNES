@@ -30,13 +30,6 @@ jobs:
           version: "21"
           env: true
 
-      - name: Setup SDL3
-        uses: libsdl-org/setup-sdl@main
-        id: sdl
-        with:
-          install-linux-dependencies: true
-          version: 3-latest
-
       - name: Build emulator
         run: |
           cmake -GNinja -S. -Bbuild/ -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${{ matrix.config.compiler_cxx }}

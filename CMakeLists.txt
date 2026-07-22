@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
+include(FetchContent)
 
 project(peNES LANGUAGES CXX)
 
@@ -34,8 +35,18 @@ add_subdirectory(src/mappers)
 if(PENES_ENABLE_HEADLESS)
   target_compile_definitions(peNES_opts PRIVATE PENES_NO_SDL)
 else()
-  find_package(SDL3 REQUIRED)
-  target_link_libraries(peNES PRIVATE SDL3::SDL3)
+  set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+  set(SDL_STATIC ON CACHE BOOL "" FORCE)
+
+  FetchContent_Declare(
+    sdl3
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL
+    GIT_TAG "release-3.4.12"
+  )
+  FetchContent_MakeAvailable(sdl3)
+  set(CMAKE_PREFIX_PATH ${sdl3_SOURCE_DIR})
+
+  target_link_libraries(peNES PRIVATE SDL3::SDL3-static)
 endif()
 
 target_compile_features(peNES_opts INTERFACE cxx_std_23)
