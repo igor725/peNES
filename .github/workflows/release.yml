@@ -12,10 +12,12 @@ jobs:
         config:
           - name: Windows
             os: windows-latest
+            compiler_c: clang
             compiler_cxx: clang
             extension: .exe
           - name: Linux
             os: ubuntu-latest
+            compiler_c: clang
             compiler_cxx: clang++
             extension:
 
@@ -44,7 +46,7 @@ jobs:
 
       - name: Build emulator
         run: |
-          cmake -GNinja -S. -Bbuild/ -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${{ matrix.config.compiler_cxx }}
+          cmake -GNinja -S. -Bbuild/ -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.config.compiler_c }} -DCMAKE_CXX_COMPILER=${{ matrix.config.compiler_cxx }}
           cmake --build build/ -j4
 
       - name: Upload artifacts

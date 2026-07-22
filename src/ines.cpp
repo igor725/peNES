@@ -18,18 +18,16 @@ CartridgeException::CartridgeException(Type type, int32_t additionalData) {
   }
 }
 
-void iNES::performSetup() {
+void iNES::performSetup(bool doValidation) {
   if (m_mappedSize < sizeof(File::Header)) throw CartridgeException(CartridgeException::Type::IncompleteFile);
 
-  m_file = static_cast<File*>(m_mappedData);
-
-  if (m_validation) {
-    if (!m_file->hdr.validate(m_mappedSize)) throw CartridgeException(CartridgeException::Type::ValidateFail);
-    if (auto const r = m_file->hdr.getRegion(); r != File::Header::Region::NTSC && r != File::Header::Region::Multi)
+  if (doValidation) {
+    if (!get()->hdr.validate(m_mappedSize)) throw CartridgeException(CartridgeException::Type::ValidateFail);
+    if (auto const r = get()->hdr.getRegion(); r != File::Header::Region::NTSC && r != File::Header::Region::Multi)
       throw CartridgeException(CartridgeException::Type::PALDump);
   }
 
-  switch (auto const m = m_file->hdr.getMapperId()) {
+  switch (auto const m = get()->hdr.getMapperId()) {
     case 0x0000: m_mapper = createMMC0(this); break;
     case 0x0001: m_mapper = createMMC1(this); break;
     case 0x0003: m_mapper = createCNROM(this); break;
@@ -39,21 +37,21 @@ void iNES::performSetup() {
   }
 }
 
-void iNES::insert(std::filesystem::path const& path) {
+void iNES::insert(std::filesystem::path const& path, bool doValidation) {
   try {
     unmapPlatform();
     mapPlatformFile(path);
-    performSetup();
+    performSetup(doValidation);
   } catch (int32_t errorCode) {
     throw CartridgeException(errorCode);
   }
 }
 
-void iNES::piped() {
+void iNES::piped(bool doValidation) {
   try {
     unmapPlatform();
     mapPlatformStdin();
-    performSetup();
+    performSetup(doValidation);
   } catch (int32_t errorCode) {
     throw CartridgeException(errorCode);
   }

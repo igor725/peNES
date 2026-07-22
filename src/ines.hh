@@ -139,27 +139,21 @@ class iNES: public PlatImpl {
   iNES() = default;
   ~iNES();
 
-  void insert(std::filesystem::path const& path);
+  void insert(std::filesystem::path const& path, bool doValidation);
 
-  void piped();
+  void piped(bool doValidation);
 
-  File* get() const { return m_file; }
+  inline File* get() const { return static_cast<File*>(m_mappedData); }
 
-  auto operator->() const { return m_file; }
+  inline auto operator->() const { return get(); }
 
-  auto getMapper() const { return m_mapper.get(); }
+  inline auto getMapper() const { return m_mapper.get(); }
 
-  void disableValidation() { m_validation = false; }
-
-  size_t getFileSize() const { return m_mappedSize; }
-
-  uint32_t resolveCPU(uint16_t addr) const;
+  inline size_t getFileSize() const { return m_mappedSize; }
 
   protected:
-  void performSetup();
+  void performSetup(bool doValidation);
 
   private:
-  std::unique_ptr<Mapper> m_mapper     = {};
-  File*                   m_file       = nullptr;
-  bool                    m_validation = true;
+  std::unique_ptr<Mapper> m_mapper = {};
 };

@@ -72,9 +72,6 @@ struct Console {
   std::jthread            _thread;
 
   Console(CmdlineParser const& cmdline): _ppu(_cpu), _apu(_cpu) {
-    if (auto skipNesValid = cmdline.getNamedArg<"skipvalid">(false)) {
-      if (skipNesValid.value()) _cartridge.disableValidation();
-    }
 #ifndef PENES_NO_SDL
     SDL_AudioSpec spec;
 
@@ -161,13 +158,13 @@ struct Console {
 #endif
   }
 
-  void put(std::string const& path) {
+  void put(std::string const& path, bool doValidation) {
     if (_thread.joinable()) throw;
 
     if (path == "-")
-      _cartridge.piped();
+      _cartridge.piped(doValidation);
     else
-      _cartridge.insert(path);
+      _cartridge.insert(path, doValidation);
 
     // SRAM, PRG-RAM, PRG-ROM handler
     _cpu.addRangeHandler(_cartridge.getMapper()->getMappedRegion(), [&](bool isWrite, uint16_t addr, uint8_t value) -> uint8_t {
@@ -303,7 +300,7 @@ int32_t main(int32_t argc, char* argv[]) {
   Console nes(args);
 
   try {
-    nes.put(nesRom.value());
+    nes.put(nesRom.value(), !args.getNamedArg<"skipvalid">(false).value());
   } catch (CartridgeException const& ex) {
     std::cerr << "Failed to load specified cartridge file: " << ex.what() << std::endl;
     return 7;
