@@ -9,13 +9,6 @@
 #include <microprofile.h>
 #endif
 
-class UnhandledInstruction: public std::exception {
-  public:
-  UnhandledInstruction() {}
-
-  const char* what() const noexcept override { return "Attempt to execute an unknown instruction"; }
-};
-
 class SkipInstruction: public std::exception {
   public:
   SkipInstruction() {}
@@ -593,7 +586,7 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
     } break;
   }
 
-  throw UnhandledInstruction();
+  throw;
 }
 
 uint8_t CPU6502::handleMath(InstructionStatus& status) {
@@ -718,7 +711,7 @@ uint8_t CPU6502::handleMath(InstructionStatus& status) {
     } break;
   }
 
-  throw UnhandledInstruction();
+  throw;
 }
 
 uint8_t CPU6502::handleShift(InstructionStatus& status) {
@@ -1064,7 +1057,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
     } break;
   }
 
-  throw UnhandledInstruction();
+  throw;
 }
 
 uint8_t CPU6502::handleIllegal(InstructionStatus& status) { /* All instructions below are illegal */
@@ -1304,10 +1297,6 @@ uint8_t CPU6502::step() {
     s.flags.stage = ExecStage::SkipExec;
     if (m_hook) m_hook(s);
     return 0;
-  } catch (UnhandledInstruction const& ex) {
-    s.flags.stage = ExecStage::FailExec;
-    if (m_hook) m_hook(s);
-    throw ex; // Rethrow if fail hook is not set or returned
   }
 }
 
@@ -1323,7 +1312,7 @@ uint8_t CPU6502::writeMemByte(uint16_t addr, uint8_t value) {
   if (addr <= 0x1FFF) return m_state.ram[addr & 0x7ff] = value;
 
   if (auto const han = findHandler(addr)) {
-    if (auto ret = (*han)(true, addr, value); ret.has_value()) return ret.value();
+    if (auto const ret = (*han)(true, addr, value); ret.has_value()) return ret.value();
   }
 
   return value;
@@ -1333,7 +1322,7 @@ uint8_t CPU6502::readMemByte(uint16_t addr) const {
   if (addr <= 0x1FFF) return m_state.ram[addr & 0x7ff];
 
   if (auto const han = findHandler(addr)) {
-    if (auto ret = (*han)(false, addr, 0); ret.has_value()) return ret.value();
+    if (auto const ret = (*han)(false, addr, 0); ret.has_value()) return ret.value();
   }
 
   return (addr >> 8); // 100thCoin's accuracy test 2. Not sure if I want to get any further into this open bus rabbit hole

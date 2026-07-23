@@ -1,7 +1,7 @@
 #pragma once
 
 #include "mmu.hh"
-#include "palette.hh"
+#include "rgbpalette.hh"
 
 #include <cstdint>
 #include <span>
@@ -131,7 +131,7 @@ class PPU: public MMU {
 
   ScanlineHook m_scanlineHook;
 
-  Palette m_colorPalette;
+  PaletteRGB m_colorPaletteRGB;
 
   PPUState m_state;
 

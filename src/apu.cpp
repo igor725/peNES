@@ -245,7 +245,7 @@ void APU::DeltaModChannel::operation(uint8_t opCode, uint8_t value) {
   static const uint16_t DMC_NTSC_TABLE[16] = {428, 380, 340, 320, 286, 254, 226, 214, 190, 160, 142, 128, 106, 84, 72, 54};
 
   if (opCode == 0x00) /* Flags / Rate */ {
-    _irqEnable = (value & 0b10000000) > 0;
+    if ((_irqEnable = (value & 0b10000000) > 0) == false) _irqTriggered = false;
     _looping   = (value & 0b01000000) > 0;
     _frequency = DMC_NTSC_TABLE[value & 0b00001111];
   } else if (opCode == 0x01) /* Direct Load */ {
@@ -258,10 +258,12 @@ void APU::DeltaModChannel::operation(uint8_t opCode, uint8_t value) {
 }
 
 std::optional<uint8_t> APU::handleRead(uint16_t addr) {
-  if (addr == 0x4015) /* APU Status */ {
+  if (addr == 0x4000) {
+    return 0;
+  } else if (addr == 0x4015) /* APU Status */ {
     bool temp        = m_state.frameIrq;
     m_state.frameIrq = false;
-    return (m_state.dmc._irqTriggered << 7) | (temp << 6) | (m_state.dmc._enabled << 4) | ((m_state.noise._length > 0) << 3) |
+    return (m_state.dmc._irqTriggered << 7) | (temp << 6) | ((m_state.dmc._currentLength > 0) << 4) | ((m_state.noise._length > 0) << 3) |
            ((m_state.triangle._length > 0) << 2) | ((m_state.pulse[1]._length > 0) << 1) | (m_state.pulse[0]._length > 0);
   }
 

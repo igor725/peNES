@@ -131,7 +131,7 @@ struct Console {
         throw;
       }
 
-      if (auto res = _apu.handleRead(addr); res.has_value()) {
+      if (auto const res = _apu.handleRead(addr); res.has_value()) {
         return res.value();
       } else if (addr >= 0x4016 && addr <= 0x4017) { // Read gamepad
         auto const pNum = addr == 0x4016 ? 0 : 1;

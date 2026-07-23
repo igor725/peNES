@@ -85,7 +85,6 @@ class CPU6502: public MMU {
     PreParse, // Parsing stage, only instruction opcode is known at this stage
     PreExec,  // Pre execution stage; mnemonic, addressing mode and operand are ready to read
     PostExec, // Instruction was successfuly executed and cycles counter was altered accordingly
-    FailExec, // Instruction failed to execute, CPU panicked further execution is unsafe
     SkipExec, // Instruction execution was skipped either by hook or by CPU itself (illegal instruction)
   };
 

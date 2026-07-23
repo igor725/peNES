@@ -227,7 +227,7 @@ void PPU::pixelEval() {
           }
 
           m_frameBuffer[(m_state.scanline * PPU_FRAMEBUFFER_PITCH) + m_state.cycle] =
-              m_colorPalette[readInternal(0x3F00 + (renderColor ? palette | renderColor : 0)) & 0x3F];
+              m_colorPaletteRGB[readInternal(0x3F00 + (renderColor ? palette | renderColor : 0)) & 0x3F];
         }
 
         if (m_state.cycle < 336) {

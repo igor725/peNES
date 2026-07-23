@@ -4,11 +4,11 @@
 #include <cmath>
 #include <cstdint>
 
-class Palette {
+class PaletteRGB {
   static constexpr double PI_NUM = 3.14159265358979323846;
 
   public:
-  Palette() { updatePalette(); }
+  PaletteRGB() { updatePalette(); }
 
   void setHueShift(float rad) {
     m_hueShift = rad;

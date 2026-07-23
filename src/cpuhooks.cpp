@@ -49,10 +49,6 @@ void CPU6502::TesterHook(InstructionStatus& status) {
     case CPU6502::ExecStage::SkipExec: {
       std::cerr << "!SKIP " << status.buildMnemonic() << std::endl;
     } break;
-    case CPU6502::ExecStage::FailExec: {
-      std::cerr << "!FAIL " << status.buildMnemonic() << std::endl;
-      abort();
-    } break;
   }
 }
 
@@ -72,10 +68,6 @@ void CPU6502::VerboseTesterHook(InstructionStatus& status) {
       if (tester != 2) abort();
       std::cerr << " @ " << (int)status.flags.cycles << std::endl;
       tester = 0;
-    } break;
-    case CPU6502::ExecStage::FailExec: {
-      std::cerr << " ! " << std::endl;
-      abort();
     } break;
   }
 }
