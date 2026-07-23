@@ -133,10 +133,10 @@ void CPU6502::reset() {
   m_state.intrClrSchd  = false;
   m_state.regs.SP      = 0xFF;
   m_state.regs.PC      = 0x00;
-  m_state.regs.P.C     = 0;
-  m_state.regs.P.Z     = 0;
-  m_state.regs.P.D     = 0;
-  m_state.regs.P.V     = 0;
+  m_state.regs.SR.C    = 0;
+  m_state.regs.SR.Z    = 0;
+  m_state.regs.SR.D    = 0;
+  m_state.regs.SR.V    = 0;
   m_state.regs.A       = 0;
   m_state.regs.X       = 0;
   m_state.regs.Y       = 0;
@@ -146,8 +146,8 @@ void CPU6502::reset() {
 uint8_t CPU6502::interrupt(uint16_t vector, bool software) {
   pushStack<uint16_t>(m_state.regs.PC);
   pushStatus(software);
-  m_state.regs.P.I = 1;
-  m_state.regs.PC  = readMem<uint16_t>(vector);
+  m_state.regs.SR.I = 1;
+  m_state.regs.PC   = readMem<uint16_t>(vector);
   return 7;
 }
 
@@ -157,23 +157,22 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
     switch (status.getBranchingSelection()) {
       case 0b00 /* Negative */: {
         status << (status.getBranchingCondition() ? Mnemonic::BMI : Mnemonic::BPL);
-        flag_status = m_state.regs.P.N;
+        flag_status = m_state.regs.SR.N;
       } break;
       case 0b01 /* Overflow */: {
         status << (status.getBranchingCondition() ? Mnemonic::BVS : Mnemonic::BVC);
-        flag_status = m_state.regs.P.V;
+        flag_status = m_state.regs.SR.V;
       } break;
       case 0b10 /* Carry */: {
         status << (status.getBranchingCondition() ? Mnemonic::BCS : Mnemonic::BCC);
-        flag_status = m_state.regs.P.C;
+        flag_status = m_state.regs.SR.C;
       } break;
       case 0b11 /* Zero */: {
         status << (status.getBranchingCondition() ? Mnemonic::BEQ : Mnemonic::BNE);
-        flag_status = m_state.regs.P.Z;
+        flag_status = m_state.regs.SR.Z;
       } break;
     }
     status << AddrMode::Relative;
-
     if (flag_status != status.getBranchingCondition()) return postExecHook(status, 2);
 
     uint16_t old_pc = m_state.regs.PC;
@@ -203,20 +202,20 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
           readMem<uint16_t>(status.operand.u16); // Dummy read
           return postExecHook(status, 4);
         } break;
-        case 0x05: /* NOP zpg,X (illegal) */ {
+        case 0x05: /* NOP zp,X (illegal) */ {
           status << Mnemonic::NOP << AddrMode::ZeroPageX;
-          readMem<uint8_t>(static_cast<uint8_t>(status.operand.u8 + m_state.regs.X)); // Dummy read
+          readMemByte(evaluateOperandToAddr(status)); // Dummy read
           return postExecHook(status, 4);
         } break;
         case 0x06: /* CLC impl */ {
           status << Mnemonic::CLC << AddrMode::Implied;
 
-          m_state.regs.P.C = 0;
+          m_state.regs.SR.C = 0;
           return postExecHook(status, 2);
         } break;
         case 0x07: /* NOP abs,X (illegal) */ {
           status << Mnemonic::NOP << AddrMode::AbsoluteX;
-          readMem<uint8_t>(status.operand.u16 + m_state.regs.X); // Dummy read
+          readMemByte(evaluateOperandToAddr(status)); // Dummy read
           return postExecHook(status, 4);
         } break;
       }
@@ -233,41 +232,41 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
         case 0x01: /* BIT zp */ {
           status << Mnemonic::BIT << AddrMode::ZeroPage;
 
-          auto const test  = readMemByte(status.operand.u8);
-          m_state.regs.P.Z = (m_state.regs.A & test) == 0;
-          m_state.regs.P.N = (test & 0x80) > 0;
-          m_state.regs.P.V = (test & 0x40) > 0;
+          auto const test   = readMemByte(evaluateOperandToAddr(status));
+          m_state.regs.SR.Z = (m_state.regs.A & test) == 0;
+          m_state.regs.SR.N = (test & 0x80) > 0;
+          m_state.regs.SR.V = (test & 0x40) > 0;
           return postExecHook(status, 3);
         } break;
         case 0x02: /* PLP impl */ {
           status << Mnemonic::PLP << AddrMode::Implied;
 
-          m_state.regs.P._raw = (popStack<uint8_t>() & 0xEF) | 0x20;
+          m_state.regs.SR = popStatus();
           return postExecHook(status, 4);
         } break;
         case 0x03: /* BIT abs */ {
           status << Mnemonic::BIT << AddrMode::Absolute;
 
-          auto test        = readMemByte(status.operand.u16);
-          m_state.regs.P.Z = (m_state.regs.A & test) == 0;
-          m_state.regs.P.N = (test & 0x80) > 0;
-          m_state.regs.P.V = (test & 0x40) > 0;
+          auto const test   = readMemByte(evaluateOperandToAddr(status));
+          m_state.regs.SR.Z = (m_state.regs.A & test) == 0;
+          m_state.regs.SR.N = (test & 0x80) > 0;
+          m_state.regs.SR.V = (test & 0x40) > 0;
           return postExecHook(status, 4);
         } break;
-        case 0x05: /* NOP zpg,X (illegal) */ {
+        case 0x05: /* NOP zp,X (illegal) */ {
           status << Mnemonic::NOP << AddrMode::ZeroPageX;
-          readMem<uint8_t>(static_cast<uint8_t>(status.operand.u8 + m_state.regs.X)); // Dummy read
+          readMemByte(evaluateOperandToAddr(status)); // Dummy read
           return postExecHook(status, 4);
         } break;
         case 0x06: /* SEC impl */ {
           status << Mnemonic::SEC << AddrMode::Implied;
 
-          m_state.regs.P.C = 1;
+          m_state.regs.SR.C = 1;
           return postExecHook(status, 2);
         } break;
         case 0x07: /* NOP abs,X (illegal) */ {
           status << Mnemonic::NOP << AddrMode::AbsoluteX;
-          readMem<uint8_t>(status.operand.u16 + m_state.regs.X); // Dummy read
+          readMemByte(evaluateOperandToAddr(status)); // Dummy read
           return postExecHook(status, 4);
         } break;
       }
@@ -277,13 +276,13 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
         case 0x00: /* RTI impl */ {
           status << Mnemonic::RTI << AddrMode::Implied;
 
-          m_state.regs.P._raw = (popStack<uint8_t>() & 0xEF) | 0x20;
-          m_state.regs.PC     = popStack<uint16_t>();
+          m_state.regs.SR._raw = (popStack<uint8_t>() & 0xEF) | 0x20;
+          m_state.regs.PC      = popStack<uint16_t>();
           return postExecHook(status, 6);
         } break;
-        case 0x01: /* NOP zpg (illegal) */ {
+        case 0x01: /* NOP zp (illegal) */ {
           status << Mnemonic::NOP << AddrMode::ZeroPage;
-          readMem<uint8_t>(status.operand.u8); // Dummy read
+          readMemByte(evaluateOperandToAddr(status)); // Dummy read
           return postExecHook(status, 3);
         } break;
         case 0x02: /* PHA impl */ {
@@ -298,9 +297,9 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
           m_state.regs.PC = status.operand.u16;
           return postExecHook(status, 3);
         } break;
-        case 0x05: /* NOP zpg,X (illegal) */ {
+        case 0x05: /* NOP zp,X (illegal) */ {
           status << Mnemonic::NOP << AddrMode::ZeroPageX;
-          readMem<uint8_t>(static_cast<uint8_t>(status.operand.u8 + m_state.regs.X)); // Dummy read
+          readMemByte(evaluateOperandToAddr(status)); // Dummy read
           return postExecHook(status, 4);
         } break;
         case 0x06: /* CLI impl */ {
@@ -310,7 +309,7 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
         } break;
         case 0x07: /* NOP abs,X (illegal) */ {
           status << Mnemonic::NOP << AddrMode::AbsoluteX;
-          readMem<uint8_t>(status.operand.u16 + m_state.regs.X); // Dummy read
+          readMemByte(evaluateOperandToAddr(status)); // Dummy read
           return postExecHook(status, 4);
         } break;
       }
@@ -325,36 +324,36 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
         } break;
         case 0x01: /* NOP zp (illegal) */ {
           status << Mnemonic::NOP << AddrMode::ZeroPage;
-          readMem<uint8_t>(status.operand.u8); // Dummy read
+          readMemByte(evaluateOperandToAddr(status)); // Dummy read
           return postExecHook(status, 3);
         } break;
         case 0x02: /* PLA impl */ {
           status << Mnemonic::PLA << AddrMode::Implied;
 
-          m_state.regs.A   = popStack<uint8_t>();
-          m_state.regs.P.Z = m_state.regs.A == 0;
-          m_state.regs.P.N = (m_state.regs.A & 0x80) > 0;
+          m_state.regs.A    = popStack<uint8_t>();
+          m_state.regs.SR.Z = m_state.regs.A == 0;
+          m_state.regs.SR.N = (m_state.regs.A & 0x80) > 0;
           return postExecHook(status, 4);
         } break;
         case 0x03: /* JMP (oper) */ {
           status << Mnemonic::JMP << AddrMode::Indirect;
-          m_state.regs.PC = std::get<2>(evaluateOperandToValue<uint16_t>(status));
+          m_state.regs.PC = evaluateOperandToValue<uint16_t>(status).value;
           return postExecHook(status, 5);
         } break;
-        case 0x05: /* NOP zpg,X (illegal) */ {
+        case 0x05: /* NOP zp,X (illegal) */ {
           status << Mnemonic::NOP << AddrMode::ZeroPageX;
-          readMem<uint8_t>(static_cast<uint8_t>(status.operand.u8 + m_state.regs.X)); // Dummy read
+          readMemByte(evaluateOperandToAddr(status)); // Dummy read
           return postExecHook(status, 4);
         } break;
         case 0x06: /* SEI impl */ {
           status << Mnemonic::SEI << AddrMode::Implied;
 
-          m_state.regs.P.I = true;
+          m_state.regs.SR.I = true;
           return postExecHook(status, 2);
         } break;
         case 0x07: /* NOP abs,X (illegal) */ {
           status << Mnemonic::NOP << AddrMode::AbsoluteX;
-          readMem<uint8_t>(status.operand.u16 + m_state.regs.X); // Dummy read
+          readMemByte(evaluateOperandToAddr(status)); // Dummy read
           return postExecHook(status, 4);
         } break;
       }
@@ -368,42 +367,38 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
         case 0x01: /* STY zp */ {
           status << Mnemonic::STY << AddrMode::ZeroPage;
 
-          writeMemByte(status.operand.u8, m_state.regs.Y);
+          writeMemByte(evaluateOperandToAddr(status), m_state.regs.Y);
           return postExecHook(status, 3);
         } break;
         case 0x02: /* DEY impl */ {
           status << Mnemonic::DEY << AddrMode::Implied;
 
           --m_state.regs.Y;
-          m_state.regs.P.Z = m_state.regs.Y == 0;
-          m_state.regs.P.N = (m_state.regs.Y & 0x80) > 0;
+          m_state.regs.SR.Z = m_state.regs.Y == 0;
+          m_state.regs.SR.N = (m_state.regs.Y & 0x80) > 0;
           return postExecHook(status, 2);
         } break;
         case 0x03: /* STY abs */ {
           status << Mnemonic::STY << AddrMode::Absolute;
-          writeMemByte(status.operand.u16, m_state.regs.Y);
+          writeMemByte(evaluateOperandToAddr(status), m_state.regs.Y);
           return postExecHook(status, 4);
         } break;
         case 0x05: /* STY zp,X */ {
           status << Mnemonic::STY << AddrMode::ZeroPageX;
-          auto const addr = static_cast<uint8_t>(status.operand.u8 + m_state.regs.X);
-
-          writeMemByte(addr, m_state.regs.Y);
+          writeMemByte(evaluateOperandToAddr(status), m_state.regs.Y);
           return postExecHook(status, 4);
         } break;
         case 0x06: /* TYA impl */ {
           status << Mnemonic::TYA << AddrMode::Implied;
 
-          m_state.regs.A   = m_state.regs.Y;
-          m_state.regs.P.Z = m_state.regs.A == 0;
-          m_state.regs.P.N = (m_state.regs.A & 0x80) > 0;
+          m_state.regs.A    = m_state.regs.Y;
+          m_state.regs.SR.Z = m_state.regs.A == 0;
+          m_state.regs.SR.N = (m_state.regs.A & 0x80) > 0;
           return postExecHook(status, 2);
         } break;
         case 0x07: /* SHY abs,X (illegal) */ {
           status << Mnemonic::SHY << AddrMode::AbsoluteX;
-          auto const addr = static_cast<uint16_t>(status.operand.u16 + m_state.regs.X);
-
-          writeMemByte(addr, m_state.regs.Y & ((addr >> 8) + 1));
+          writeMemByte(evaluateOperandToAddr(status), m_state.regs.Y & (((status.operand.u16 + m_state.regs.X) >> 8) + 1));
           return postExecHook(status, 5);
         } break;
       }
@@ -413,54 +408,53 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
         case 0x00: /* LDY imm */ {
           status << Mnemonic::LDY << AddrMode::Immediate;
 
-          m_state.regs.Y   = status.operand.u8;
-          m_state.regs.P.Z = m_state.regs.Y == 0;
-          m_state.regs.P.N = (m_state.regs.Y & 0x80) > 0;
+          m_state.regs.Y    = status.operand.u8;
+          m_state.regs.SR.Z = m_state.regs.Y == 0;
+          m_state.regs.SR.N = (m_state.regs.Y & 0x80) > 0;
           return postExecHook(status, 2);
         } break;
         case 0x01: /* LDY zp */ {
           status << Mnemonic::LDY << AddrMode::ZeroPage;
 
-          m_state.regs.Y   = readMemByte(status.operand.u8);
-          m_state.regs.P.Z = m_state.regs.Y == 0;
-          m_state.regs.P.N = (m_state.regs.Y & 0x80) > 0;
+          m_state.regs.Y    = readMemByte(evaluateOperandToAddr(status));
+          m_state.regs.SR.Z = m_state.regs.Y == 0;
+          m_state.regs.SR.N = (m_state.regs.Y & 0x80) > 0;
           return postExecHook(status, 3);
         } break;
         case 0x02: /* TAY impl */ {
           status << Mnemonic::TAY << AddrMode::Implied;
-          m_state.regs.Y   = m_state.regs.A;
-          m_state.regs.P.Z = m_state.regs.Y == 0;
-          m_state.regs.P.N = (m_state.regs.Y & 0x80) > 0;
+          m_state.regs.Y    = m_state.regs.A;
+          m_state.regs.SR.Z = m_state.regs.Y == 0;
+          m_state.regs.SR.N = (m_state.regs.Y & 0x80) > 0;
           return postExecHook(status, 2);
         } break;
         case 0x03: /* LDY abs */ {
           status << Mnemonic::LDY << AddrMode::Absolute;
 
-          m_state.regs.Y   = readMemByte(status.operand.u16);
-          m_state.regs.P.Z = m_state.regs.Y == 0;
-          m_state.regs.P.N = (m_state.regs.Y & 0x80) > 0;
+          m_state.regs.Y    = readMemByte(evaluateOperandToAddr(status));
+          m_state.regs.SR.Z = m_state.regs.Y == 0;
+          m_state.regs.SR.N = (m_state.regs.Y & 0x80) > 0;
           return postExecHook(status, 4);
         } break;
         case 0x05: /* LDY zp,X */ {
           status << Mnemonic::LDY << AddrMode::ZeroPageX;
-          m_state.regs.Y   = readMemByte(static_cast<uint8_t>(status.operand.u8 + m_state.regs.X));
-          m_state.regs.P.Z = m_state.regs.Y == 0;
-          m_state.regs.P.N = (m_state.regs.Y & 0x80) > 0;
+          m_state.regs.Y    = readMemByte(evaluateOperandToAddr(status));
+          m_state.regs.SR.Z = m_state.regs.Y == 0;
+          m_state.regs.SR.N = (m_state.regs.Y & 0x80) > 0;
           return postExecHook(status, 4);
         } break;
         case 0x06: /* CLV impl */ {
           status << Mnemonic::CLV << AddrMode::Implied;
-          m_state.regs.P.V = 0;
+          m_state.regs.SR.V = 0;
           return postExecHook(status, 2);
         } break;
         case 0x07: /* LDY abs,X */ {
           status << Mnemonic::LDY << AddrMode::AbsoluteX;
-          uint16_t const addr = status.operand.u16 + m_state.regs.X;
-
-          m_state.regs.Y   = readMemByte(addr);
-          m_state.regs.P.Z = m_state.regs.Y == 0;
-          m_state.regs.P.N = (m_state.regs.Y & 0x80) > 0;
-          return postExecHook(status, (status.operand.u16 & 0xFF00) == (addr & 0xFF00) ? 4 : 5);
+          auto const eval   = evaluateOperandToAddr(status);
+          m_state.regs.Y    = readMemByte(eval);
+          m_state.regs.SR.Z = m_state.regs.Y == 0;
+          m_state.regs.SR.N = (m_state.regs.Y & 0x80) > 0;
+          return postExecHook(status, 3 + eval.cyclesTaken);
         } break;
       }
     } break;
@@ -471,55 +465,55 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
 
           uint8_t val = m_state.regs.Y - status.operand.u8;
 
-          m_state.regs.P.C = m_state.regs.Y >= status.operand.u8;
-          m_state.regs.P.Z = val == 0;
-          m_state.regs.P.N = (val & 0x80) > 0;
+          m_state.regs.SR.C = m_state.regs.Y >= status.operand.u8;
+          m_state.regs.SR.Z = val == 0;
+          m_state.regs.SR.N = (val & 0x80) > 0;
           return postExecHook(status, 2);
         } break;
         case 0x01: /* CPY zp */ {
           status << Mnemonic::CPY << AddrMode::ZeroPage;
 
-          auto const    rval = readMemByte(status.operand.u8);
+          auto const    rval = readMemByte(evaluateOperandToAddr(status));
           uint8_t const val  = m_state.regs.Y - rval;
 
-          m_state.regs.P.C = m_state.regs.Y >= rval;
-          m_state.regs.P.Z = val == 0;
-          m_state.regs.P.N = (val & 0x80) > 0;
+          m_state.regs.SR.C = m_state.regs.Y >= rval;
+          m_state.regs.SR.Z = val == 0;
+          m_state.regs.SR.N = (val & 0x80) > 0;
           return postExecHook(status, 3);
         } break;
         case 0x02: /* INY impl */ {
           status << Mnemonic::INY << AddrMode::Implied;
 
           m_state.regs.Y += 1;
-          m_state.regs.P.Z = m_state.regs.Y == 0;
-          m_state.regs.P.N = (m_state.regs.Y & 0x80) > 0;
+          m_state.regs.SR.Z = m_state.regs.Y == 0;
+          m_state.regs.SR.N = (m_state.regs.Y & 0x80) > 0;
           return postExecHook(status, 2);
         } break;
         case 0x03: /* CPY abs */ {
           status << Mnemonic::CPY << AddrMode::Absolute;
 
-          auto const rval = readMemByte(status.operand.u16);
+          auto const rval = readMemByte(evaluateOperandToAddr(status));
 
           uint8_t const val = m_state.regs.Y - rval;
 
-          m_state.regs.P.C = m_state.regs.Y >= rval;
-          m_state.regs.P.Z = val == 0;
-          m_state.regs.P.N = (val & 0x80) > 0;
+          m_state.regs.SR.C = m_state.regs.Y >= rval;
+          m_state.regs.SR.Z = val == 0;
+          m_state.regs.SR.N = (val & 0x80) > 0;
           return postExecHook(status, 4);
         } break;
-        case 0x05: /* NOP zpg,X (illegal) */ {
+        case 0x05: /* NOP zp,X (illegal) */ {
           status << Mnemonic::NOP << AddrMode::ZeroPageX;
-          readMem<uint8_t>(static_cast<uint8_t>(status.operand.u8 + m_state.regs.X)); // Dummy read
+          readMemByte(evaluateOperandToAddr(status)); // Dummy read
           return postExecHook(status, 4);
         } break;
         case 0x06: /* CLD impl */ {
           status << Mnemonic::CLD << AddrMode::Implied;
-          m_state.regs.P.D = false;
+          m_state.regs.SR.D = false;
           return postExecHook(status, 2);
         } break;
         case 0x07: /* NOP abs,X (illegal) */ {
           status << Mnemonic::NOP << AddrMode::AbsoluteX;
-          readMem<uint8_t>(status.operand.u16 + m_state.regs.X); // Dummy read
+          readMemByte(evaluateOperandToAddr(status)); // Dummy read
           return postExecHook(status, 4);
         } break;
       }
@@ -531,42 +525,42 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
 
           uint8_t val = m_state.regs.X - status.operand.u8;
 
-          m_state.regs.P.C = m_state.regs.X >= status.operand.u8;
-          m_state.regs.P.Z = val == 0;
-          m_state.regs.P.N = (val & 0x80) > 0;
+          m_state.regs.SR.C = m_state.regs.X >= status.operand.u8;
+          m_state.regs.SR.Z = val == 0;
+          m_state.regs.SR.N = (val & 0x80) > 0;
           return postExecHook(status, 2);
         } break;
         case 0x01: /* CPX zp */ {
           status << Mnemonic::CPX << AddrMode::ZeroPage;
-          auto const [cycles, addr, rval] = evaluateOperandToValue<uint8_t>(status);
+          auto const eval = evaluateOperandToValue<uint8_t>(status);
 
-          uint8_t const val = m_state.regs.X - rval;
+          uint8_t const val = m_state.regs.X - eval.value;
 
-          m_state.regs.P.C = m_state.regs.X >= rval;
-          m_state.regs.P.Z = val == 0;
-          m_state.regs.P.N = (val & 0x80) > 0;
+          m_state.regs.SR.C = m_state.regs.X >= eval.value;
+          m_state.regs.SR.Z = val == 0;
+          m_state.regs.SR.N = (val & 0x80) > 0;
           return postExecHook(status, 3);
         } break;
         case 0x02: /* INX impl */ {
           status << Mnemonic::INX << AddrMode::Implied;
 
           m_state.regs.X += 1;
-          m_state.regs.P.Z = m_state.regs.X == 0;
-          m_state.regs.P.N = (m_state.regs.X & 0x80) > 0;
+          m_state.regs.SR.Z = m_state.regs.X == 0;
+          m_state.regs.SR.N = (m_state.regs.X & 0x80) > 0;
           return postExecHook(status, 2);
         } break;
         case 0x03: /* CPX abs */ {
           status << Mnemonic::CPX << AddrMode::Absolute;
-          auto const [cycles, addr, rval] = evaluateOperandToValue<uint8_t>(status);
+          auto const eval = evaluateOperandToValue<uint8_t>(status);
 
-          uint8_t const val = m_state.regs.X - rval;
+          uint8_t const val = m_state.regs.X - eval.value;
 
-          m_state.regs.P.C = m_state.regs.X >= rval;
-          m_state.regs.P.Z = val == 0;
-          m_state.regs.P.N = (val & 0x80) > 0;
+          m_state.regs.SR.C = m_state.regs.X >= eval.value;
+          m_state.regs.SR.Z = val == 0;
+          m_state.regs.SR.N = (val & 0x80) > 0;
           return postExecHook(status, 4);
         } break;
-        case 0x05: /* NOP zpg,X (illegal) */ {
+        case 0x05: /* NOP zp,X (illegal) */ {
           status << Mnemonic::NOP << AddrMode::ZeroPageX;
           evaluateOperandToValue<uint8_t>(status); // Dummy read
           return postExecHook(status, 4);
@@ -574,12 +568,12 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
         case 0x06: /* SED impl */ {
           status << Mnemonic::SED << AddrMode::Implied;
 
-          m_state.regs.P.D = 1;
+          m_state.regs.SR.D = 1;
           return postExecHook(status, 2);
         } break;
         case 0x07: /* NOP abs,X (illegal) */ {
           status << Mnemonic::NOP << AddrMode::AbsoluteX;
-          readMem<uint8_t>(status.operand.u16 + m_state.regs.X); // Dummy read
+          readMemByte(evaluateOperandToAddr(status)); // Dummy read
           return postExecHook(status, 4);
         } break;
       }
@@ -614,100 +608,100 @@ uint8_t CPU6502::handleMath(InstructionStatus& status) {
       status << Mnemonic::ORA;
       parse();
 
-      auto const [cycles, addr, value] = evaluateOperandToValue<uint8_t>(status);
+      auto const eval = evaluateOperandToValue<uint8_t>(status);
 
-      m_state.regs.A |= value;
-      m_state.regs.P.Z = m_state.regs.A == 0;
-      m_state.regs.P.N = (m_state.regs.A & 0x80) > 0;
-      return postExecHook(status, 2 + cycles);
+      m_state.regs.A |= eval.value;
+      m_state.regs.SR.Z = m_state.regs.A == 0;
+      m_state.regs.SR.N = (m_state.regs.A & 0x80) > 0;
+      return postExecHook(status, 2 + eval.cyclesTaken);
     } break;
     case 0x01: { // AND
       status << Mnemonic::AND;
       parse();
 
-      auto const [cycles, addr, value] = evaluateOperandToValue<uint8_t>(status);
+      auto const eval = evaluateOperandToValue<uint8_t>(status);
 
-      m_state.regs.A &= value;
-      m_state.regs.P.Z = m_state.regs.A == 0;
-      m_state.regs.P.N = (m_state.regs.A & 0x80) > 0;
-      return postExecHook(status, 2 + cycles);
+      m_state.regs.A &= eval.value;
+      m_state.regs.SR.Z = m_state.regs.A == 0;
+      m_state.regs.SR.N = (m_state.regs.A & 0x80) > 0;
+      return postExecHook(status, 2 + eval.cyclesTaken);
     } break;
     case 0x02: { // EOR
       status << Mnemonic::EOR;
       parse();
 
-      auto const [cycles, addr, value] = evaluateOperandToValue<uint8_t>(status);
+      auto const eval = evaluateOperandToValue<uint8_t>(status);
 
-      m_state.regs.A ^= value;
-      m_state.regs.P.Z = m_state.regs.A == 0;
-      m_state.regs.P.N = (m_state.regs.A & 0x80) > 0;
-      return postExecHook(status, 2 + cycles);
+      m_state.regs.A ^= eval.value;
+      m_state.regs.SR.Z = m_state.regs.A == 0;
+      m_state.regs.SR.N = (m_state.regs.A & 0x80) > 0;
+      return postExecHook(status, 2 + eval.cyclesTaken);
     } break;
     case 0x03: { // ADC
       status << Mnemonic::ADC;
       parse();
 
-      auto const [cycles, addr, value] = evaluateOperandToValue<uint8_t>(status);
+      auto const eval = evaluateOperandToValue<uint8_t>(status);
 
-      uint16_t result  = m_state.regs.A + value + m_state.regs.P.C;
-      m_state.regs.P.C = result > 0xFF;
-      m_state.regs.P.V = (~(m_state.regs.A ^ value) & (m_state.regs.A ^ result) & 0x80) != 0;
-      m_state.regs.A   = result & 0xFF;
-      m_state.regs.P.Z = m_state.regs.A == 0;
-      m_state.regs.P.N = (m_state.regs.A & 0x80) > 0;
-      return postExecHook(status, 2 + cycles);
+      uint16_t result   = m_state.regs.A + eval.value + m_state.regs.SR.C;
+      m_state.regs.SR.C = result > 0xFF;
+      m_state.regs.SR.V = (~(m_state.regs.A ^ eval.value) & (m_state.regs.A ^ result) & 0x80) != 0;
+      m_state.regs.A    = result & 0xFF;
+      m_state.regs.SR.Z = m_state.regs.A == 0;
+      m_state.regs.SR.N = (m_state.regs.A & 0x80) > 0;
+      return postExecHook(status, 2 + eval.cyclesTaken);
     } break;
     case 0x04: { // STA
       status << Mnemonic::STA;
       parse();
 
-      auto [cycles, addr] = evaluateOperandToAddr(status);
-      if (status.flags.addrMode == AddrMode::AbsoluteX) cycles += 1;
-      if (status.flags.addrMode == AddrMode::AbsoluteY) cycles += 1;
-      if (status.flags.addrMode == AddrMode::IndirIndexedY) cycles += 1;
+      auto eval = evaluateOperandToAddr(status);
+      if (status.flags.addrMode == AddrMode::AbsoluteX) eval.cyclesTaken += 1;
+      if (status.flags.addrMode == AddrMode::AbsoluteY) eval.cyclesTaken += 1;
+      if (status.flags.addrMode == AddrMode::IndirIndexedY) eval.cyclesTaken += 1;
 
-      writeMemByte(addr, m_state.regs.A);
-      return postExecHook(status, 3 + cycles);
+      writeMemByte(eval, m_state.regs.A);
+      return postExecHook(status, 3 + eval.cyclesTaken);
     } break;
     case 0x05: { // LDA
       status << Mnemonic::LDA;
       parse();
 
-      auto const [cycles, addr, value] = evaluateOperandToValue<uint8_t>(status);
+      auto const eval = evaluateOperandToValue<uint8_t>(status);
 
-      m_state.regs.A   = value;
-      m_state.regs.P.Z = m_state.regs.A == 0;
-      m_state.regs.P.N = (m_state.regs.A & 0x80) > 0;
-      return postExecHook(status, 2 + cycles);
+      m_state.regs.A    = eval.value;
+      m_state.regs.SR.Z = m_state.regs.A == 0;
+      m_state.regs.SR.N = (m_state.regs.A & 0x80) > 0;
+      return postExecHook(status, 2 + eval.cyclesTaken);
     } break;
     case 0x06: { // CMP
       status << Mnemonic::CMP;
       parse();
 
-      auto const [cycles, addr, value] = evaluateOperandToValue<uint8_t>(status);
+      auto const eval = evaluateOperandToValue<uint8_t>(status);
 
-      uint8_t val      = m_state.regs.A - value;
-      m_state.regs.P.C = m_state.regs.A >= value;
-      m_state.regs.P.Z = val == 0;
-      m_state.regs.P.N = (val & 0x80) > 0;
-      return postExecHook(status, 2 + cycles);
+      uint8_t val       = m_state.regs.A - eval.value;
+      m_state.regs.SR.C = m_state.regs.A >= eval.value;
+      m_state.regs.SR.Z = val == 0;
+      m_state.regs.SR.N = (val & 0x80) > 0;
+      return postExecHook(status, 2 + eval.cyclesTaken);
     } break;
     case 0x07: { // SBC
       status << Mnemonic::SBC;
       parse();
 
-      auto const [cycles, addr, value] = evaluateOperandToValue<uint8_t>(status);
+      auto const eval = evaluateOperandToValue<uint8_t>(status);
 
-      uint8_t  inverted_value = value ^ 0xFF;
-      uint16_t carry_in       = m_state.regs.P.C ? 1 : 0;
+      uint8_t  inverted_value = eval.value ^ 0xFF;
+      uint16_t carry_in       = m_state.regs.SR.C ? 1 : 0;
       uint16_t res            = m_state.regs.A + inverted_value + carry_in;
 
-      m_state.regs.P.V = ((m_state.regs.A ^ res) & (inverted_value ^ res) & 0x80) != 0;
-      m_state.regs.P.C = res > 0xFF;
-      m_state.regs.A   = res & 0xFF;
-      m_state.regs.P.Z = m_state.regs.A == 0;
-      m_state.regs.P.N = (m_state.regs.A & 0x80) > 0;
-      return postExecHook(status, 2 + cycles);
+      m_state.regs.SR.V = ((m_state.regs.A ^ res) & (inverted_value ^ res) & 0x80) != 0;
+      m_state.regs.SR.C = res > 0xFF;
+      m_state.regs.A    = res & 0xFF;
+      m_state.regs.SR.Z = m_state.regs.A == 0;
+      m_state.regs.SR.N = (m_state.regs.A & 0x80) > 0;
+      return postExecHook(status, 2 + eval.cyclesTaken);
     } break;
   }
 
@@ -742,17 +736,17 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
       }
 
       {
-        auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+        auto const eval = evaluateOperandToValue<uint8_t>(status);
 
-        cycles += 4 + std::get<0>(evaluated);
-        origValue   = std::get<2>(evaluated);
-        resultValue = writeMemByte(std::get<1>(evaluated), origValue << 1);
+        cycles += 4 + eval.cyclesTaken;
+        origValue   = eval.value;
+        resultValue = writeMemByte(eval, origValue << 1);
       }
 
     leave_early_ASL:
-      m_state.regs.P.C = (origValue & 0x80) > 0;
-      m_state.regs.P.Z = (resultValue == 0);
-      m_state.regs.P.N = (resultValue & 0x80) > 0;
+      m_state.regs.SR.C = (origValue & 0x80) > 0;
+      m_state.regs.SR.Z = (resultValue == 0);
+      m_state.regs.SR.N = (resultValue & 0x80) > 0;
       return postExecHook(status, cycles);
     } break;
     case 0x01: {
@@ -767,7 +761,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
 
           cycles      = 2;
           origValue   = m_state.regs.A;
-          resultValue = (m_state.regs.A = (origValue << 1) | (m_state.regs.P.C ? 1 : 0));
+          resultValue = (m_state.regs.A = (origValue << 1) | (m_state.regs.SR.C ? 1 : 0));
           goto leave_early_ROL;
         } break;
         case 0x03: /* ROL abs */ status << AddrMode::Absolute; break;
@@ -781,17 +775,17 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
       }
 
       {
-        auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+        auto const eval = evaluateOperandToValue<uint8_t>(status);
 
-        cycles += 4 + std::get<0>(evaluated);
-        origValue   = std::get<2>(evaluated);
-        resultValue = writeMemByte(std::get<1>(evaluated), (origValue << 1) | (m_state.regs.P.C ? 1 : 0));
+        cycles += 4 + eval.cyclesTaken;
+        origValue   = eval.value;
+        resultValue = writeMemByte(eval, (origValue << 1) | (m_state.regs.SR.C ? 1 : 0));
       }
 
     leave_early_ROL:
-      m_state.regs.P.C = (origValue & 0x80) != 0;
-      m_state.regs.P.Z = (resultValue == 0);
-      m_state.regs.P.N = (resultValue & 0x80) != 0;
+      m_state.regs.SR.C = (origValue & 0x80) != 0;
+      m_state.regs.SR.Z = (resultValue == 0);
+      m_state.regs.SR.N = (resultValue & 0x80) != 0;
       return postExecHook(status, cycles);
     } break;
     case 0x02: {
@@ -820,17 +814,17 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
       }
 
       {
-        auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+        auto const eval = evaluateOperandToValue<uint8_t>(status);
 
-        cycles += 4 + std::get<0>(evaluated);
-        origValue   = std::get<2>(evaluated);
-        resultValue = writeMemByte(std::get<1>(evaluated), origValue >> 1);
+        cycles += 4 + eval.cyclesTaken;
+        origValue   = eval.value;
+        resultValue = writeMemByte(eval, origValue >> 1);
       }
 
     leave_early_LSR:
-      m_state.regs.P.N = 0;
-      m_state.regs.P.Z = resultValue == 0;
-      m_state.regs.P.C = (origValue & 0x01) != 0;
+      m_state.regs.SR.N = 0;
+      m_state.regs.SR.Z = resultValue == 0;
+      m_state.regs.SR.C = (origValue & 0x01) != 0;
       return postExecHook(status, cycles);
     } break;
     case 0x03: {
@@ -844,7 +838,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
 
           cycles      = 2;
           origValue   = m_state.regs.A;
-          resultValue = (m_state.regs.A = (origValue >> 1) | (m_state.regs.P.C ? 0x80 : 0x00));
+          resultValue = (m_state.regs.A = (origValue >> 1) | (m_state.regs.SR.C ? 0x80 : 0x00));
           goto leave_early_ROR;
         } break;
         case 0x03: /* ROR abs */ status << Mnemonic::ROR << AddrMode::Absolute; break;
@@ -858,20 +852,20 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
       }
 
       {
-        auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+        auto const eval = evaluateOperandToValue<uint8_t>(status);
 
-        cycles += 4 + std::get<0>(evaluated);
-        origValue   = std::get<2>(evaluated);
-        resultValue = writeMemByte(std::get<1>(evaluated), (origValue >> 1) | (m_state.regs.P.C ? 0x80 : 0x00));
+        cycles += 4 + eval.cyclesTaken;
+        origValue   = eval.value;
+        resultValue = writeMemByte(eval, (origValue >> 1) | (m_state.regs.SR.C ? 0x80 : 0x00));
       }
 
     leave_early_ROR:
-      m_state.regs.P.C = (origValue & 0x01) != 0;
-      m_state.regs.P.Z = (resultValue == 0);
-      m_state.regs.P.N = (resultValue & 0x80) != 0;
+      m_state.regs.SR.C = (origValue & 0x01) != 0;
+      m_state.regs.SR.Z = (resultValue == 0);
+      m_state.regs.SR.N = (resultValue & 0x80) != 0;
       return postExecHook(status, cycles);
     } break;
-    case 0x04: { // Transfers
+    case 0x04: {
       switch (status.getAddrMode()) {
         case 0x00: /* NOP imm (illegal) */ {
           status << Mnemonic::NOP << AddrMode::Immediate;
@@ -880,28 +874,29 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
         case 0x01: /* STX zp */ {
           status << Mnemonic::STX << AddrMode::ZeroPage;
 
-          writeMemByte(status.operand.u8, m_state.regs.X);
+          writeMemByte(evaluateOperandToAddr(status), m_state.regs.X);
           return postExecHook(status, 3);
         } break;
         case 0x02: /* TXA */ {
           status << Mnemonic::TXA << AddrMode::Implied;
 
-          m_state.regs.A   = m_state.regs.X;
-          m_state.regs.P.Z = m_state.regs.A == 0;
-          m_state.regs.P.N = (m_state.regs.A & 0x80) > 0;
+          m_state.regs.A    = m_state.regs.X;
+          m_state.regs.SR.Z = m_state.regs.A == 0;
+          m_state.regs.SR.N = (m_state.regs.A & 0x80) > 0;
           return postExecHook(status, 2);
         } break;
         case 0x03: /* STX abs */ {
           status << Mnemonic::STX << AddrMode::Absolute;
 
-          writeMemByte(status.operand.u16, m_state.regs.X);
+          writeMemByte(evaluateOperandToAddr(status), m_state.regs.X);
           return postExecHook(status, 4);
         } break;
         case 0x04: /* JAM */ throw;
         case 0x05: /* STX zp,Y */ {
           status << Mnemonic::STX << AddrMode::ZeroPageY;
+          auto const eval = evaluateOperandToAddr(status);
 
-          writeMemByte(static_cast<uint8_t>(status.operand.u8 + m_state.regs.Y), m_state.regs.X);
+          writeMemByte(eval, m_state.regs.X);
           return postExecHook(status, 4);
         } break;
         case 0x06: /* TXS */ {
@@ -912,70 +907,48 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
         } break;
         case 0x07: /* SHX abs,Y (illegal) */ {
           status << Mnemonic::SHX << AddrMode::AbsoluteY;
-          auto const addr = static_cast<uint16_t>(status.operand.u16 + m_state.regs.Y);
+          auto const eval = evaluateOperandToAddr(status);
 
-          writeMemByte(addr, m_state.regs.X & ((addr >> 8) + 1));
+          writeMemByte(eval, m_state.regs.X & ((eval.getAddress() >> 8) + 1));
           return postExecHook(status, 5);
         } break;
       }
     } break;
     case 0x05: {
-      uint8_t value = 0, cycles = 1;
+      uint8_t value = 0, cycles = 2;
 
       switch (status.getAddrMode()) {
-        case 0x00: /* LDX imm */ {
-          status << Mnemonic::LDX << AddrMode::Immediate;
-
-          value = status.operand.u8;
-          cycles += 1;
-        } break;
-        case 0x01: /* LDX zp */ {
-          status << Mnemonic::LDX << AddrMode::ZeroPage;
-
-          value = readMemByte(status.operand.u8);
-          cycles += 2;
-        } break;
+        case 0x00: /* LDX imm */ status << Mnemonic::LDX << AddrMode::Immediate; break;
+        case 0x01: /* LDX zp */ status << Mnemonic::LDX << AddrMode::ZeroPage; break;
         case 0x02: /* TAX */ {
           status << Mnemonic::TAX << AddrMode::Implied;
 
           value = m_state.regs.A;
-          cycles += 1;
+          goto leave_early_XSET;
         } break;
-        case 0x03: /* LDX abs */ {
-          status << Mnemonic::LDX << AddrMode::Absolute;
-
-          value = readMemByte(status.operand.u16);
-          cycles += 3;
-        } break;
+        case 0x03: /* LDX abs */ status << Mnemonic::LDX << AddrMode::Absolute; break;
         case 0x04: throw;
-        case 0x05: /* LDX zp,Y */ {
-          status << Mnemonic::LDX << AddrMode::ZeroPageY;
-
-          value = readMemByte(static_cast<uint8_t>(status.operand.u8 + m_state.regs.Y));
-          cycles += 3;
-        } break;
+        case 0x05: /* LDX zp,Y */ status << Mnemonic::LDX << AddrMode::ZeroPageY; break;
         case 0x06: /* TSX */ {
           status << Mnemonic::TSX << AddrMode::Implied;
 
           value = m_state.regs.SP;
-          cycles += 1;
+          goto leave_early_XSET;
         } break;
-        case 0x07: /* LDX abs,Y */ {
-          status << Mnemonic::LDX << AddrMode::AbsoluteY;
-
-          auto target_addr = status.operand.u16 + m_state.regs.Y;
-
-          value = readMemByte(target_addr);
-          cycles += 3;
-          if ((status.operand.u16 & 0xFF00) != (target_addr & 0xFF00)) {
-            cycles += 1;
-          }
-        } break;
+        case 0x07: /* LDX abs,Y */ status << Mnemonic::LDX << AddrMode::AbsoluteY; break;
       }
 
-      m_state.regs.X   = value;
-      m_state.regs.P.Z = m_state.regs.X == 0;
-      m_state.regs.P.N = (m_state.regs.X & 0x80) > 0;
+      {
+        auto const eval = evaluateOperandToValue<uint8_t>(status);
+
+        cycles += eval.cyclesTaken;
+        value = eval.value;
+      }
+
+    leave_early_XSET:
+      m_state.regs.X    = value;
+      m_state.regs.SR.Z = m_state.regs.X == 0;
+      m_state.regs.SR.N = (m_state.regs.X & 0x80) > 0;
       return postExecHook(status, cycles);
     } break;
     case 0x06: {
@@ -1007,16 +980,16 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
       }
 
       {
-        auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+        auto const eval = evaluateOperandToValue<uint8_t>(status);
 
-        cycles += 4 + std::get<0>(evaluated);
-        origValue   = std::get<2>(evaluated);
-        resultValue = writeMemByte(std::get<1>(evaluated), origValue - 1);
+        cycles += 4 + eval.cyclesTaken;
+        origValue   = eval.value;
+        resultValue = writeMemByte(eval, origValue - 1);
       }
 
     leave_early_DEC:
-      m_state.regs.P.Z = resultValue == 0;
-      m_state.regs.P.N = (resultValue & 0x80) > 0;
+      m_state.regs.SR.Z = resultValue == 0;
+      m_state.regs.SR.N = (resultValue & 0x80) > 0;
       return postExecHook(status, cycles);
     } break;
     case 0x07: {
@@ -1044,15 +1017,15 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
       }
 
       {
-        auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+        auto const eval = evaluateOperandToValue<uint8_t>(status);
 
-        cycles += 4 + std::get<0>(evaluated);
-        origValue   = std::get<2>(evaluated);
-        resultValue = writeMemByte(std::get<1>(evaluated), origValue + 1);
+        cycles += 4 + eval.cyclesTaken;
+        origValue   = eval.value;
+        resultValue = writeMemByte(eval, origValue + 1);
       }
 
-      m_state.regs.P.Z = resultValue == 0;
-      m_state.regs.P.N = (resultValue & 0x80) > 0;
+      m_state.regs.SR.Z = resultValue == 0;
+      m_state.regs.SR.N = (resultValue & 0x80) > 0;
       return postExecHook(status, cycles);
     } break;
   }
@@ -1105,152 +1078,152 @@ uint8_t CPU6502::handleIllegal(InstructionStatus& status) { /* All instructions 
   uint8_t cycles = 2 /* TODO calculate those */, origValue = 0, resultValue = 0;
   switch (status.flags.mnemonic) {
     case Mnemonic::SLO: {
-      auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+      auto const eval = evaluateOperandToValue<uint8_t>(status);
 
       /* ASL */
-      origValue   = std::get<2>(evaluated);
-      resultValue = writeMemByte(std::get<1>(evaluated), origValue << 1);
+      origValue   = eval.value;
+      resultValue = writeMemByte(eval, origValue << 1);
 
       /* ORA */
       m_state.regs.A |= resultValue;
 
-      m_state.regs.P.C = (origValue & 0x80) > 0;
-      m_state.regs.P.Z = m_state.regs.A == 0;
-      m_state.regs.P.N = (m_state.regs.A & 0x80) > 0;
+      m_state.regs.SR.C = (origValue & 0x80) > 0;
+      m_state.regs.SR.Z = m_state.regs.A == 0;
+      m_state.regs.SR.N = (m_state.regs.A & 0x80) > 0;
     } break;
     case Mnemonic::RLA: {
-      auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+      auto const eval = evaluateOperandToValue<uint8_t>(status);
 
       /* ROL */
-      origValue   = std::get<2>(evaluated);
-      resultValue = writeMemByte(std::get<1>(evaluated), (origValue << 1) | (m_state.regs.P.C ? 1 : 0));
+      origValue   = eval.value;
+      resultValue = writeMemByte(eval, (origValue << 1) | (m_state.regs.SR.C ? 1 : 0));
 
       /* AND */
       m_state.regs.A &= resultValue;
 
-      m_state.regs.P.C = (origValue & 0x80) != 0;
-      m_state.regs.P.Z = m_state.regs.A == 0;
-      m_state.regs.P.N = (m_state.regs.A & 0x80) > 0;
+      m_state.regs.SR.C = (origValue & 0x80) != 0;
+      m_state.regs.SR.Z = m_state.regs.A == 0;
+      m_state.regs.SR.N = (m_state.regs.A & 0x80) > 0;
     } break;
     case Mnemonic::SRE: {
-      auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+      auto const eval = evaluateOperandToValue<uint8_t>(status);
 
       /* LSR */
-      origValue   = std::get<2>(evaluated);
-      resultValue = writeMemByte(std::get<1>(evaluated), origValue >> 1);
+      origValue   = eval.value;
+      resultValue = writeMemByte(eval, origValue >> 1);
 
       /* EOR */
       m_state.regs.A ^= resultValue;
 
-      m_state.regs.P.C = (origValue & 0x01) != 0;
-      m_state.regs.P.Z = m_state.regs.A == 0;
-      m_state.regs.P.N = (m_state.regs.A & 0x80) > 0;
+      m_state.regs.SR.C = (origValue & 0x01) != 0;
+      m_state.regs.SR.Z = m_state.regs.A == 0;
+      m_state.regs.SR.N = (m_state.regs.A & 0x80) > 0;
     } break;
     case Mnemonic::RRA: {
-      auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+      auto const eval = evaluateOperandToValue<uint8_t>(status);
 
       /* ROR */
-      origValue        = std::get<2>(evaluated);
-      resultValue      = writeMemByte(std::get<1>(evaluated), (origValue >> 1) | (m_state.regs.P.C ? 0x80 : 0x00));
-      m_state.regs.P.C = (origValue & 0x01) != 0;
+      origValue         = eval.value;
+      resultValue       = writeMemByte(eval, (origValue >> 1) | (m_state.regs.SR.C ? 0x80 : 0x00));
+      m_state.regs.SR.C = (origValue & 0x01) != 0;
 
       /* ADC */
-      uint16_t result = m_state.regs.A + resultValue + m_state.regs.P.C;
+      uint16_t result = m_state.regs.A + resultValue + m_state.regs.SR.C;
 
-      m_state.regs.P.V = (~(m_state.regs.A ^ resultValue) & (m_state.regs.A ^ result) & 0x80) != 0;
-      m_state.regs.P.C = result > 0xFF;
-      m_state.regs.A   = result & 0xFF;
-      m_state.regs.P.Z = m_state.regs.A == 0;
-      m_state.regs.P.N = (m_state.regs.A & 0x80) > 0;
+      m_state.regs.SR.V = (~(m_state.regs.A ^ resultValue) & (m_state.regs.A ^ result) & 0x80) != 0;
+      m_state.regs.SR.C = result > 0xFF;
+      m_state.regs.A    = result & 0xFF;
+      m_state.regs.SR.Z = m_state.regs.A == 0;
+      m_state.regs.SR.N = (m_state.regs.A & 0x80) > 0;
     } break;
     case Mnemonic::SAX: {
-      auto const evaluated = evaluateOperandToValue<uint8_t>(status);
-      writeMemByte(std::get<1>(evaluated), m_state.regs.A & m_state.regs.X);
+      auto const eval = evaluateOperandToValue<uint8_t>(status);
+      writeMemByte(eval, m_state.regs.A & m_state.regs.X);
     } break;
     case Mnemonic::LAX: {
-      auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+      auto const eval = evaluateOperandToValue<uint8_t>(status);
 
-      m_state.regs.X = m_state.regs.A = std::get<2>(evaluated);
-      m_state.regs.P.Z                = m_state.regs.X == 0;
-      m_state.regs.P.N                = (m_state.regs.X & 0x80) > 0;
+      m_state.regs.X = m_state.regs.A = eval.value;
+      m_state.regs.SR.Z               = m_state.regs.X == 0;
+      m_state.regs.SR.N               = (m_state.regs.X & 0x80) > 0;
     } break;
     case Mnemonic::DCP: {
-      auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+      auto const eval = evaluateOperandToValue<uint8_t>(status);
 
       /* DEC */
-      auto const decRes = writeMemByte(std::get<1>(evaluated), std::get<2>(evaluated) - 1);
+      auto const decRes = writeMemByte(eval, eval.value - 1);
 
       /* CMP */
-      uint8_t val      = m_state.regs.A - decRes;
-      m_state.regs.P.C = m_state.regs.A >= decRes;
-      m_state.regs.P.Z = val == 0;
-      m_state.regs.P.N = (val & 0x80) > 0;
+      uint8_t val       = m_state.regs.A - decRes;
+      m_state.regs.SR.C = m_state.regs.A >= decRes;
+      m_state.regs.SR.Z = val == 0;
+      m_state.regs.SR.N = (val & 0x80) > 0;
     } break;
     case Mnemonic::ISC: {
-      auto const evaluated = evaluateOperandToValue<uint8_t>(status);
+      auto const eval = evaluateOperandToValue<uint8_t>(status);
 
       /* INC */
-      auto const incRes = writeMemByte(std::get<1>(evaluated), std::get<2>(evaluated) + 1);
+      auto const incRes = writeMemByte(eval, eval.value + 1);
 
       /* SBC */
       uint8_t const  inverted_value = incRes ^ 0xFF;
-      uint16_t const res            = m_state.regs.A + inverted_value + (m_state.regs.P.C ? 1 : 0);
+      uint16_t const res            = m_state.regs.A + inverted_value + (m_state.regs.SR.C ? 1 : 0);
 
-      m_state.regs.P.V = ((m_state.regs.A ^ res) & (inverted_value ^ res) & 0x80) != 0;
-      m_state.regs.P.C = res > 0xFF;
-      m_state.regs.A   = res & 0xFF;
-      m_state.regs.P.Z = m_state.regs.A == 0;
-      m_state.regs.P.N = (m_state.regs.A & 0x80) > 0;
+      m_state.regs.SR.V = ((m_state.regs.A ^ res) & (inverted_value ^ res) & 0x80) != 0;
+      m_state.regs.SR.C = res > 0xFF;
+      m_state.regs.A    = res & 0xFF;
+      m_state.regs.SR.Z = m_state.regs.A == 0;
+      m_state.regs.SR.N = (m_state.regs.A & 0x80) > 0;
     } break;
     case Mnemonic::ANC: {
       m_state.regs.A &= status.operand.u8;
-      m_state.regs.P.C = (m_state.regs.A & 0x80) > 0;
-      m_state.regs.P.N = (m_state.regs.A & 0x80) > 0;
-      m_state.regs.P.Z = m_state.regs.A == 0;
+      m_state.regs.SR.C = (m_state.regs.A & 0x80) > 0;
+      m_state.regs.SR.N = (m_state.regs.A & 0x80) > 0;
+      m_state.regs.SR.Z = m_state.regs.A == 0;
     } break;
     case Mnemonic::ASR: {
       m_state.regs.A &= status.operand.u8;
-      m_state.regs.P.C = (m_state.regs.A & 0x01) != 0;
+      m_state.regs.SR.C = (m_state.regs.A & 0x01) != 0;
       m_state.regs.A >>= 1;
-      m_state.regs.P.Z = (m_state.regs.A == 0);
-      m_state.regs.P.N = (m_state.regs.A & 0x80) != 0;
+      m_state.regs.SR.Z = (m_state.regs.A == 0);
+      m_state.regs.SR.N = (m_state.regs.A & 0x80) != 0;
     } break;
     case Mnemonic::ARR: {
       m_state.regs.A &= status.operand.u8;
 
-      m_state.regs.A   = (m_state.regs.A >> 1) | (m_state.regs.P.C ? 0x80 : 0x00);
-      m_state.regs.P.C = (m_state.regs.A & 0x40) != 0;
-      m_state.regs.P.V = ((m_state.regs.A >> 6) ^ (m_state.regs.A >> 5)) & 0x01;
-      m_state.regs.P.Z = (m_state.regs.A == 0);
-      m_state.regs.P.N = (m_state.regs.A & 0x80) != 0;
+      m_state.regs.A    = (m_state.regs.A >> 1) | (m_state.regs.SR.C ? 0x80 : 0x00);
+      m_state.regs.SR.C = (m_state.regs.A & 0x40) != 0;
+      m_state.regs.SR.V = ((m_state.regs.A >> 6) ^ (m_state.regs.A >> 5)) & 0x01;
+      m_state.regs.SR.Z = (m_state.regs.A == 0);
+      m_state.regs.SR.N = (m_state.regs.A & 0x80) != 0;
     } break;
     case Mnemonic::ANE: {
-      m_state.regs.A   = (m_state.regs.A | 0xee) & (m_state.regs.X & status.operand.u8);
-      m_state.regs.P.Z = m_state.regs.A == 0;
-      m_state.regs.P.N = (m_state.regs.A & 0x80) > 0;
+      m_state.regs.A    = (m_state.regs.A | 0xee) & (m_state.regs.X & status.operand.u8);
+      m_state.regs.SR.Z = m_state.regs.A == 0;
+      m_state.regs.SR.N = (m_state.regs.A & 0x80) > 0;
     } break;
     case Mnemonic::LXA: {
-      m_state.regs.A   = (m_state.regs.A | 0xee) & status.operand.u8;
-      m_state.regs.X   = m_state.regs.A;
-      m_state.regs.P.Z = (m_state.regs.X == 0);
-      m_state.regs.P.N = (m_state.regs.X & 0x80) != 0;
+      m_state.regs.A    = (m_state.regs.A | 0xee) & status.operand.u8;
+      m_state.regs.X    = m_state.regs.A;
+      m_state.regs.SR.Z = (m_state.regs.X == 0);
+      m_state.regs.SR.N = (m_state.regs.X & 0x80) != 0;
     } break;
     case Mnemonic::AXS: {
       uint8_t const res = m_state.regs.A & m_state.regs.X;
 
-      m_state.regs.P.C = (res >= status.operand.u8);
-      m_state.regs.X   = res - status.operand.u8;
-      m_state.regs.P.Z = (m_state.regs.X == 0);
-      m_state.regs.P.N = (m_state.regs.X & 0x80) != 0;
+      m_state.regs.SR.C = (res >= status.operand.u8);
+      m_state.regs.X    = res - status.operand.u8;
+      m_state.regs.SR.Z = (m_state.regs.X == 0);
+      m_state.regs.SR.N = (m_state.regs.X & 0x80) != 0;
     } break;
     case Mnemonic::SBC: {
-      uint16_t const value = (uint16_t)m_state.regs.A - (uint16_t)status.operand.u8 - (uint16_t)(m_state.regs.P.C ? 0 : 1);
+      uint16_t const value = (uint16_t)m_state.regs.A - (uint16_t)status.operand.u8 - (uint16_t)(m_state.regs.SR.C ? 0 : 1);
 
-      m_state.regs.P.C = (value < 0x100);
-      m_state.regs.P.V = ((m_state.regs.A ^ (uint8_t)value) & (~status.operand.u8 ^ (uint8_t)value) & 0x80) != 0;
-      m_state.regs.A   = (uint8_t)value;
-      m_state.regs.P.Z = (m_state.regs.A == 0);
-      m_state.regs.P.N = (m_state.regs.A & 0x80) != 0;
+      m_state.regs.SR.C = (value < 0x100);
+      m_state.regs.SR.V = ((m_state.regs.A ^ (uint8_t)value) & (~status.operand.u8 ^ (uint8_t)value) & 0x80) != 0;
+      m_state.regs.A    = (uint8_t)value;
+      m_state.regs.SR.Z = (m_state.regs.A == 0);
+      m_state.regs.SR.N = (m_state.regs.A & 0x80) != 0;
     } break;
 
     default: break;
@@ -1270,8 +1243,8 @@ uint8_t CPU6502::step() {
   }
   if (m_state.intrClrSchd) {
     m_state.intrClrSchd = false;
-    m_state.regs.P.I    = 0;
-  } else if (m_state.regs.P.I == 0 && m_state.irqTriggered) {
+    m_state.regs.SR.I   = 0;
+  } else if (m_state.regs.SR.I == 0 && m_state.irqTriggered) {
     m_state.irqTriggered = false;
     interrupt(0xFFFE, false);
     return 0;
@@ -1308,7 +1281,9 @@ void CPU6502::triggerIRQ() {
   m_state.irqTriggered = true;
 }
 
-uint8_t CPU6502::writeMemByte(uint16_t addr, uint8_t value) {
+uint8_t CPU6502::writeMemByte(EvalAddress const& eval, uint8_t value) {
+  if (!eval.validAddr) throw;
+  auto const addr = eval.getAddress();
   if (addr <= 0x1FFF) return m_state.ram[addr & 0x7ff] = value;
 
   if (auto const han = findHandler(addr)) {
@@ -1318,14 +1293,16 @@ uint8_t CPU6502::writeMemByte(uint16_t addr, uint8_t value) {
   return value;
 }
 
-uint8_t CPU6502::readMemByte(uint16_t addr) const {
+uint8_t CPU6502::readMemByte(EvalAddress const& eval) const {
+  if (!eval.validAddr) throw;
+  auto const addr = eval.getAddress();
   if (addr <= 0x1FFF) return m_state.ram[addr & 0x7ff];
 
   if (auto const han = findHandler(addr)) {
     if (auto const ret = (*han)(false, addr, 0); ret.has_value()) return ret.value();
   }
 
-  return (addr >> 8); // 100thCoin's accuracy test 2. Not sure if I want to get any further into this open bus rabbit hole
+  return (eval.baseAddress >> 8); // 100thCoin's open bus accuracy test 2+3. Not sure if I want to get any further into this rabbit hole
 }
 
 void CPU6502::preExecHook(InstructionStatus& status) {
