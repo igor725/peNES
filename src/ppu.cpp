@@ -168,8 +168,65 @@ std::optional<uint8_t> PPU::cpuWrite(uint16_t addr, uint8_t value) {
   return {};
 }
 
+void PPU::findSpritesOnScanline() {
+  m_state.spritesPerScan = 0;
+
+  uint16_t const spriteHeight = m_state.regs.C & CTRL_TALL_SPRITE ? 16 : 8;
+
+  for (uint8_t i = 0; i < 64; ++i) {
+    uint16_t spriteY = m_state.scanline - m_state.oam[i * 4 + 0] - 1;
+
+    if (spriteY < spriteHeight) {
+      if (m_state.spritesPerScan >= 8) {
+        m_state.regs.S |= STATUS_SPRITE_OVERFLOW;
+        break;
+      }
+
+      ScanSprite ss;
+      ss.id   = i;
+      ss.attr = m_state.oam[i * 4 + 2];
+      ss.x    = m_state.oam[i * 4 + 3];
+
+      uint16_t sprAddr;
+      uint16_t sprTile = m_state.oam[i * 4 + 1];
+      uint16_t sy      = spriteY ^ (ss.attr & SPRITE_FLIP_VERTI ? spriteHeight - 1 : 0);
+
+      if (spriteHeight == 16) {
+        uint16_t tableBit  = (sprTile % 2) << 12;
+        uint16_t tileIndex = (sprTile << 4) & 0xFFE0;
+        uint16_t rowOffset = (sy & 8) << 1;
+
+        sprAddr = tableBit | tileIndex | rowOffset;
+      } else {
+        uint16_t tableBit  = (m_state.regs.C & CTRL_SPR_TAB_ADDR) << 9;
+        uint16_t tileIndex = sprTile << 4;
+
+        sprAddr = tableBit | tileIndex;
+      }
+      sprAddr |= (sy & 7);
+
+      ss.dataLow  = readInternal(sprAddr);
+      ss.dataHigh = readInternal(sprAddr + 8);
+
+      if (ss.attr & SPRITE_FLIP_HORIZ) {
+        auto constexpr flip = [](uint8_t b) -> uint8_t {
+          b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
+          b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
+          b = (b & 0xAA) >> 1 | (b & 0x55) << 1;
+          return b;
+        };
+        ss.dataLow  = flip(ss.dataLow);
+        ss.dataHigh = flip(ss.dataHigh);
+      }
+
+      m_state.scanSprites[m_state.spritesPerScan++] = std::move(ss);
+    }
+  }
+}
+
 void PPU::pixelEval() {
   if (m_state.regs.M & (MASK_DRAW_SPRITE | MASK_DRAW_BG)) {
+    if (m_state.cycle == 0) findSpritesOnScanline();
     if (m_state.scanline < 240) {
       if (m_state.cycle <= 255 || (m_state.cycle >= 320 && m_state.cycle <= 340)) {
         if (m_state.cycle <= 255) {
@@ -185,39 +242,25 @@ void PPU::pixelEval() {
 
           uint8_t renderColor = bgColor;
           if (m_state.regs.M & MASK_DRAW_SPRITE) {
-            for (uint8_t i = 0; i < 64; ++i) {
-              uint16_t spriteHeight  = m_state.regs.C & CTRL_TALL_SPRITE ? 16 : 8;
-              uint16_t spriteY       = m_state.scanline - m_state.oam[i * 4 + 0] - 1;
-              uint16_t spriteAttribs = m_state.oam[i * 4 + 2];
-              uint16_t spriteX       = m_state.cycle - m_state.oam[i * 4 + 3];
+            for (uint8_t i = 0; i < m_state.spritesPerScan; ++i) {
+              auto const& spr = m_state.scanSprites[i];
 
-              if (spriteX < 8 && spriteY < spriteHeight) {
-                uint16_t sx      = spriteX ^ !(spriteAttribs & SPRITE_FLIP_HORIZ) * 7;
-                uint16_t sy      = spriteY ^ (spriteAttribs & SPRITE_FLIP_VERTI ? spriteHeight - 1 : 0);
-                uint16_t sprTile = m_state.oam[i * 4 + 1];
-                uint16_t sprAddr;
+              int16_t const offset = m_state.cycle - spr.x;
+              if (offset >= 0 && offset < 8) {
+                uint8_t const colorBit    = 7 - offset;
+                uint8_t const colorLow    = (spr.dataLow >> colorBit) & 1;
+                uint8_t const colorHigh   = (spr.dataHigh >> colorBit) & 1;
+                uint8_t const spriteColor = (colorHigh << 1) | colorLow;
 
-                if (spriteHeight == 16) {
-                  uint16_t tableBit  = (sprTile % 2) << 12;
-                  uint16_t tileIndex = (sprTile << 4) & 0xFFE0;
-                  uint16_t rowOffset = (sy & 8) << 1;
+                if (spriteColor != 0) {
+                  if (spr.id == 0 && bgColor != 0 && m_state.cycle < 255) {
+                    m_state.regs.S |= STATUS_SPRITE_ZERO_HIT;
+                  }
 
-                  sprAddr = tableBit | tileIndex | rowOffset;
-                } else {
-                  uint16_t tableBit  = (m_state.regs.C & CTRL_SPR_TAB_ADDR) << 9;
-                  uint16_t tileIndex = sprTile << 4;
-
-                  sprAddr = tableBit | tileIndex;
-                }
-                sprAddr |= (sy & 7);
-
-                if (uint16_t spriteColor = (readInternal(sprAddr + 8) >> sx << 1 & 2) | (readInternal(sprAddr) >> sx & 1)) {
-                  if (i == 0 && bgColor != 0 && m_state.cycle < 255) m_state.regs.S |= STATUS_SPRITE_ZERO_HIT;
-                  if (++m_state.spritesPerScan >= 9) m_state.regs.S |= STATUS_SPRITE_OVERFLOW;
-                  if (!(m_state.cycle < 8 && !(m_state.regs.M & MASK_SPRITE_LC_CLIP))) {
-                    if (!((spriteAttribs & SPRITE_PRIO) && bgColor != 0)) {
+                  if (m_state.cycle > 8 || m_state.regs.M & MASK_SPRITE_LC_CLIP) {
+                    if (!((spr.attr & SPRITE_PRIO) && bgColor != 0)) {
                       renderColor = spriteColor;
-                      palette     = 0x10 | ((spriteAttribs & SPRITE_PALETTE) * 4);
+                      palette     = 0x10 | ((spr.attr & SPRITE_PALETTE) * 4);
                     }
                     break;
                   }

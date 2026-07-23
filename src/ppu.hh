@@ -18,6 +18,14 @@ class PPU: public MMU {
     uint16_t totalScanlines;
   };
 
+  struct ScanSprite {
+    uint8_t id;
+    uint8_t x;
+    uint8_t attr;
+    uint8_t dataLow;
+    uint8_t dataHigh;
+  };
+
   static constexpr std::array<RegionTiming, 3> REGION_TIMINGS = {{
       {241, 260, 261, 262}, // NTSC
       {241, 260, 311, 312}, // PAL
@@ -76,22 +84,22 @@ class PPU: public MMU {
     uint32_t shiftAt        = 0;
     int32_t  nextDecay      = 0;
 
-    uint8_t vram[2048];
-    uint8_t palette[32];
-    uint8_t oam[256];
+    uint8_t    vram[2048];
+    uint8_t    palette[32];
+    uint8_t    oam[256];
+    ScanSprite scanSprites[8];
   };
 
-  template <typename P>
+  template <typename T>
   struct Frame {
-
-    std::span<P const> pixels;
+    std::span<T const> pixels;
     uint32_t           pitch;
 
     bool empty() const { return pixels.empty() || pitch == 0; }
 
     auto data() const { return pixels.data(); }
 
-    auto pitch_bytes() const { return pitch * sizeof(P); }
+    auto pitchBytes() const { return pitch * sizeof(T); }
   };
 
   enum class RegionMode : uint8_t { NTSC = 0, PAL = 1, Dendy = 2 };
@@ -121,6 +129,7 @@ class PPU: public MMU {
   void restoreState(PPUState&& state) { m_state = std::move(state); }
 
   protected:
+  void     findSpritesOnScanline();
   uint16_t getNametableMirroringOffset(uint16_t address);
   void     writeInternal(uint16_t addr, uint8_t value);
   uint8_t  readInternal(uint16_t addr);
