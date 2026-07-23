@@ -156,7 +156,7 @@ void APU::NoiseChannel::step() {
     return;
   }
 
-  if (!_haltCounter) _timerCounter -= 1;
+  _timerCounter -= 1;
 }
 
 void APU::NoiseChannel::advanceLength() {
@@ -232,9 +232,9 @@ void APU::DeltaModChannel::step(CPU6502& cpu) {
         _bufferEmpty   = true;
       }
     }
-  } else {
-    _timerCounter--;
   }
+
+  _timerCounter -= 1;
 }
 
 uint8_t APU::DeltaModChannel::output() const {

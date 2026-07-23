@@ -53,9 +53,11 @@ else()
 
   FetchContent_Declare(
     sdl3
-    GIT_REPOSITORY https://github.com/libsdl-org/SDL
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
     GIT_TAG "release-3.4.12"
+    GIT_SHALLOW 1
   )
+  message("Downloading SDL3...")
   FetchContent_MakeAvailable(sdl3)
 
   target_link_libraries(peNES PRIVATE SDL3::SDL3-static)
@@ -88,9 +90,11 @@ endif()
 if(PENES_MICROPROFILE)
   FetchContent_Declare(
     microprofile
-    GIT_REPOSITORY https://github.com/jonasmr/microprofile
+    GIT_REPOSITORY https://github.com/jonasmr/microprofile.git
     GIT_TAG "v4.0"
+    GIT_SHALLOW 1
   )
+  message("Downloading microprofile...")
   FetchContent_MakeAvailable(microprofile)
 
   target_link_libraries(peNES_opts INTERFACE microprofile)
