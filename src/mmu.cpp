@@ -1,6 +1,6 @@
 #include "mmu.hh"
 
-// #include <algorithm>
+#include <algorithm>
 #include <stdexcept>
 
 MMU::MMU(uint16_t bo): m_baseOffset(bo) {

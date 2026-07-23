@@ -11,7 +11,7 @@ option(PENES_MICROPROFILE "Enable microprofile" FALSE)
 
 add_library(peNES_opts INTERFACE)
 
-if(LINUX)
+if(LINUX OR ANDROID)
   set(PENES_PLAT src/plat/plinux.cpp)
 elseif(WIN32)
   set(PENES_PLAT src/plat/pwin.cpp)
