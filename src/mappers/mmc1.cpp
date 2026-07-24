@@ -53,6 +53,34 @@ class MMC1: public Mapper {
 
   std::pair<uint16_t, uint16_t> getMappedRegion() const final { return {m_cartridge->hdr.flags.battery ? 0x6000 : 0x8000, 0xFFFF}; }
 
+  std::vector<uint8_t> dumpState() const final {
+    auto dmp = prepareMapperDumper();
+
+    dmp.push(m_shiftReg);
+    dmp.push(m_shiftCount);
+    dmp.push(m_ctlReg);
+    dmp.push(m_charBank0);
+    dmp.push(m_charBank1);
+    dmp.push(m_prgBank);
+    dmp.push(m_prgOff);
+    dmp.push(m_chrOff);
+
+    return dmp.extract();
+  }
+
+  void restoreState(std::vector<uint8_t>& state) final {
+    auto rst = prepareMapperDumper(state);
+
+    m_shiftReg   = rst.pop<decltype(m_shiftReg)>();
+    m_shiftCount = rst.pop<decltype(m_shiftCount)>();
+    m_ctlReg     = rst.pop<decltype(m_ctlReg)>();
+    m_charBank0  = rst.pop<decltype(m_charBank0)>();
+    m_charBank1  = rst.pop<decltype(m_charBank1)>();
+    m_prgBank    = rst.pop<decltype(m_prgBank)>();
+    m_prgOff     = rst.pop<decltype(m_prgOff)>();
+    m_chrOff     = rst.pop<decltype(m_chrOff)>();
+  }
+
   private:
   uint8_t m_shiftReg   = 0;
   uint8_t m_shiftCount = 0;

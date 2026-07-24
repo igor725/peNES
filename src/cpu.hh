@@ -392,7 +392,7 @@ class CPU6502: public MMU {
 
   CPUState dumpState() const { return m_state; }
 
-  void restoreState(CPUState&& state) { m_state = std::move(state); }
+  void restoreState(CPUState& state) { m_state = std::move(state); }
 
   protected:
   inline EvalAddress evaluateOperandToAddr(InstructionStatus const& status) {

@@ -35,3 +35,12 @@ MapperDumper Mapper::prepareMapperDumper() const {
 
   return dump;
 }
+
+MapperDumper Mapper::prepareMapperDumper(std::vector<uint8_t>& state) {
+  MapperDumper rst(state);
+
+  m_chrRam = rst.pop<decltype(m_chrRam)>();
+  m_prgRam = rst.pop<decltype(m_prgRam)>();
+
+  return rst;
+}

@@ -55,13 +55,14 @@ curl -L http://127.0.0.1:8486/path/to/a/totally/legal/storage/of/manually/dumped
 Currently the emulator supports only Unix-like systems, it was tested on Arch Linux only so far.
 
 ### Controls
-On gamepad you can use DPAD to navigate, A/B buttons to make actions, Y to cause CPU to reset, Select/Start to pick options
+On gamepad you can use DPAD to navigate, A/B buttons to make actions, Y to cause CPU to reset, Select/Start to pick options. LB/RB to save/restore current enulation state.
 
 Keyboard bindings:
 * Escape - Reset CPU
 * Arrows - Navigate
 * Z/X - Action buttons
 * Space/Enter - Select/Start options buttons
+* S/R - Save/Restore current emulation state
 * F1 - Set heatmap printing threshold to 1
 * F2 - Set heatmap printing threshold to 10
 * F3 - Set heatmap printing threshold to 100

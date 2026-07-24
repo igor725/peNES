@@ -26,10 +26,24 @@ class CNROM: public Mapper {
 
   std::pair<uint16_t, uint16_t> getMappedRegion() const final { return {m_cartridge->hdr.flags.battery ? 0x6000 : 0x8000, 0xFFFF}; }
 
-  void setBank(uint8_t bnk) { m_chrOff = (bnk % (uint32_t)m_cartridge->hdr.getCharNum()) * 0x2000; }
+  std::vector<uint8_t> dumpState() const final {
+    auto dmp = prepareMapperDumper();
+
+    dmp.push(m_chrOff);
+
+    return dmp.extract();
+  }
+
+  void restoreState(std::vector<uint8_t>& state) final {
+    auto rst = prepareMapperDumper(state);
+
+    m_chrOff = rst.pop<decltype(m_chrOff)>();
+  }
 
   private:
   uint32_t m_chrOff = 0;
+
+  void setBank(uint8_t bnk) { m_chrOff = (bnk % (uint32_t)m_cartridge->hdr.getCharNum()) * 0x2000; }
 };
 
 std::unique_ptr<Mapper> createCNROM(iNES* c) {

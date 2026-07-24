@@ -22,11 +22,14 @@ class Mapper {
   virtual uint8_t                       cpuOperation(bool isWrite, uint16_t addr, uint8_t value) = 0;
   virtual uint8_t                       ppuOperation(bool isWrite, uint16_t addr, uint8_t value) = 0;
   virtual std::pair<uint16_t, uint16_t> getMappedRegion() const                                  = 0;
+  virtual std::vector<uint8_t>          dumpState() const                                        = 0;
+  virtual void                          restoreState(std::vector<uint8_t>& state)                = 0;
 
   virtual bool nextScanline() { return false; };
 
   protected:
   MapperDumper       prepareMapperDumper() const;
+  MapperDumper       prepareMapperDumper(std::vector<uint8_t>& state);
   std::span<uint8_t> prepareCHRMemory(size_t size);
   std::span<uint8_t> preparePRGMemory(size_t size);
   uint8_t            handleBattery(bool isWrite, uint16_t addr, uint8_t value);

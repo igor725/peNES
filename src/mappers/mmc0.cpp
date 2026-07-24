@@ -23,6 +23,10 @@ class MMC0: public Mapper {
   }
 
   std::pair<uint16_t, uint16_t> getMappedRegion() const final { return {0x8000, 0xFFFF}; }
+
+  std::vector<uint8_t> dumpState() const final { return prepareMapperDumper().extract(); }
+
+  void restoreState(std::vector<uint8_t>& state) final { prepareMapperDumper(state); }
 };
 
 std::unique_ptr<Mapper> createMMC0(iNES* c) {

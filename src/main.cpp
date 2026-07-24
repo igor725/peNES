@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <iostream>
 #include <mutex>
+#include <optional>
 #include <stop_token>
 #include <thread>
 
@@ -32,6 +33,13 @@ struct Console {
   using Delta = std::chrono::duration<double>;
 
   static constexpr auto TARGET_FRAMETIME = Delta(1.0 / 62.0988);
+
+  struct FullState {
+    CPU6502::CPUState    cpuState;
+    PPU::PPUState        ppuState;
+    APU::APUState        apuState;
+    std::vector<uint8_t> mapperState;
+  };
 
   union PadState {
     struct {
@@ -74,6 +82,8 @@ struct Console {
   std::mutex              _sync;
   std::condition_variable _wait;
   std::jthread            _thread;
+
+  std::optional<FullState> _fullState;
 
   Console(CmdlineParser const& cmdline): _ppu(_cpu), _apu(_cpu) {
 #ifndef PENES_NO_SDL
@@ -161,6 +171,8 @@ struct Console {
     _apu.onData(_batchSize * 2, [&](std::span<float const> sample) { SDL_PutAudioStreamData(_stream, sample.data(), sample.size_bytes()); });
 #endif
   }
+
+  ~Console() { stop(); }
 
   void put(std::string const& path, bool doValidation) {
     if (_thread.joinable()) throw;
@@ -260,7 +272,25 @@ struct Console {
     });
   }
 
-  ~Console() { stop(); }
+  void saveState() {
+    std::lock_guard const lock(_sync);
+    _fullState = FullState {
+        .cpuState    = _cpu.dumpState(),
+        .ppuState    = _ppu.dumpState(),
+        .apuState    = _apu.dumpState(),
+        .mapperState = _cartridge.getMapper()->dumpState(),
+    };
+  }
+
+  void restoreState() {
+    std::lock_guard const lock(_sync);
+    if (_fullState.has_value()) {
+      _cpu.restoreState(_fullState->cpuState);
+      _ppu.restoreState(_fullState->ppuState);
+      _apu.restoreState(_fullState->apuState);
+      _cartridge.getMapper()->restoreState(_fullState->mapperState);
+    }
+  }
 
   void stop() {
     _sync.lock();
@@ -363,6 +393,8 @@ int32_t main(int32_t argc, char* argv[]) {
         } break;
         case SDL_EVENT_KEY_DOWN:
           if (ev.key.scancode == SDL_SCANCODE_ESCAPE) nes._cpu.reset();
+          if (ev.key.scancode == SDL_SCANCODE_S) nes.saveState();
+          if (ev.key.scancode == SDL_SCANCODE_R) nes.restoreState();
         case SDL_EVENT_KEY_UP: {
           switch (ev.key.scancode) {
             case SDL_SCANCODE_LEFT: currPadState[0].left = ev.type == SDL_EVENT_KEY_DOWN; break;
@@ -385,12 +417,14 @@ int32_t main(int32_t argc, char* argv[]) {
           }
         } break;
         case SDL_EVENT_GAMEPAD_REMOVED: {
-          if (auto pad = SDL_GetGamepadFromID(ev.gdevice.which)) {
+          if (auto const pad = SDL_GetGamepadFromID(ev.gdevice.which)) {
             SDL_CloseGamepad(pad);
           }
         } break;
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
           if (ev.gbutton.button == SDL_GAMEPAD_BUTTON_NORTH) nes._cpu.reset();
+          if (ev.gbutton.button == SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) nes.saveState();
+          if (ev.gbutton.button == SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) nes.restoreState();
         } /* Intentional fallthrough */
         case SDL_EVENT_GAMEPAD_BUTTON_UP: {
           switch (ev.gbutton.button) {

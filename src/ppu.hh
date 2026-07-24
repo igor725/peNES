@@ -126,7 +126,7 @@ class PPU: public MMU {
 
   PPUState dumpState() const { return m_state; }
 
-  void restoreState(PPUState&& state) { m_state = std::move(state); }
+  void restoreState(PPUState& state) { m_state = state; }
 
   protected:
   void     findSpritesOnScanline();

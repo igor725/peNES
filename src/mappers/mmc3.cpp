@@ -80,6 +80,43 @@ class MMC3: public Mapper {
     return m_irqCounter == 0 && m_irqEnable;
   }
 
+  std::vector<uint8_t> dumpState() const final {
+    auto dmp = prepareMapperDumper();
+
+    return dmp.extract();
+  }
+
+  void restoreState(std::vector<uint8_t>& state) final {
+    auto rst = prepareMapperDumper(state);
+
+    m_irqLatch   = rst.pop<decltype(m_irqLatch)>();
+    m_irqCounter = rst.pop<decltype(m_irqCounter)>();
+    m_irqEnable  = rst.pop<decltype(m_irqEnable)>();
+    m_irqReload  = rst.pop<decltype(m_irqReload)>();
+
+    m_targetRegister = rst.pop<decltype(m_targetRegister)>();
+    m_prgMode        = rst.pop<decltype(m_prgMode)>();
+    m_chrMode        = rst.pop<decltype(m_chrMode)>();
+    m_registers      = rst.pop<decltype(m_registers)>();
+
+    m_progBanks = rst.pop<decltype(m_progBanks)>();
+    m_chrBanks  = rst.pop<decltype(m_chrBanks)>();
+  }
+
+  private:
+  uint8_t m_irqLatch   = 0;
+  uint8_t m_irqCounter = 0;
+  bool    m_irqEnable  = false;
+  bool    m_irqReload  = false;
+
+  uint8_t                m_targetRegister = 0;
+  uint8_t                m_prgMode        = 0;
+  uint8_t                m_chrMode        = 0;
+  std::array<uint8_t, 8> m_registers      = {0, 0, 0, 0, 0, 0, 0, 0};
+
+  std::array<uint32_t, 4> m_progBanks = {0, 0, 0, 0};
+  std::array<uint32_t, 8> m_chrBanks  = {0, 0, 0, 0, 0, 0, 0, 0};
+
   void updateOffsets() {
     uint32_t prgBanksTotal  = m_cartridge->hdr.getProgNum() * 2;
     uint32_t chrBlocksTotal = m_cartridge->hdr.getCharNum() * 8;
@@ -130,20 +167,6 @@ class MMC3: public Mapper {
       m_chrBanks[7] = r1 + 0x0400;
     }
   }
-
-  private:
-  uint8_t m_irqLatch   = 0;
-  uint8_t m_irqCounter = 0;
-  bool    m_irqEnable  = false;
-  bool    m_irqReload  = false;
-
-  uint8_t                m_targetRegister = 0;
-  uint8_t                m_prgMode        = 0;
-  uint8_t                m_chrMode        = 0;
-  std::array<uint8_t, 8> m_registers      = {0, 0, 0, 0, 0, 0, 0, 0};
-
-  std::array<uint32_t, 4> m_progBanks = {0, 0, 0, 0};
-  std::array<uint32_t, 8> m_chrBanks  = {0, 0, 0, 0, 0, 0, 0, 0};
 };
 
 std::unique_ptr<Mapper> createMMC3(iNES* c) {

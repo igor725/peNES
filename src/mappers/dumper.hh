@@ -12,6 +12,12 @@ class MapperDumper {
   std::vector<uint8_t> m_dump;
 
   public:
+  MapperDumper()          = default;
+  virtual ~MapperDumper() = default;
+  MapperDumper(std::vector<uint8_t>& state): m_dump(state) {};
+
+  std::vector<uint8_t> extract() { return std::move(m_dump); }
+
   template <typename T>
   void push(T const& value) {
     using nrT = std::remove_cvref_t<T>;
