@@ -14,10 +14,6 @@ class SkipInstruction: public std::exception {
   SkipInstruction() {}
 };
 
-CPU6502::CPU6502(): MMU(0x2000) {}
-
-CPU6502::~CPU6502() {}
-
 std::string CPU6502::InstructionStatus::buildMnemonic(bool withAddr) const {
   std::string temp;
   temp.reserve(withAddr ? 16 : 10);

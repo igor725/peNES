@@ -8,7 +8,7 @@
 
 class CPU6502;
 
-class PPU: public MMU {
+class PPU: public MMU<uint16_t, 0, 0x1FFF, 32> {
   static constexpr bool PRE_RP2C02G_BEHAVIOR = false;
 
   struct RegionTiming {

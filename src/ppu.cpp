@@ -8,7 +8,7 @@
 #include <microprofile.h>
 #endif
 
-PPU::PPU(CPU6502& c): MMU(0), m_cpu(c) {}
+PPU::PPU(CPU6502& c): m_cpu(c) {}
 
 PPU::~PPU() {}
 
@@ -27,7 +27,7 @@ uint16_t PPU::getNametableMirroringOffset(uint16_t addr) {
 uint8_t PPU::readInternal(uint16_t addr) {
   addr &= 0x3FFF;
   if (auto const han = findHandler(addr)) {
-    if (auto ret = (*han)(false, addr, 0); ret.has_value()) return ret.value();
+    if (auto const ret = (*han)(false, addr, 0); ret.has_value()) return ret.value();
   }
 
   if (addr >= 0x2000 && addr <= 0x3EFF) {

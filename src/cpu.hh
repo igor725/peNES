@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <string>
 
-class CPU6502: public MMU {
+class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 32> {
   union Status {
     struct {
       uint8_t C : 1;
@@ -253,8 +253,8 @@ class CPU6502: public MMU {
 
   using CPUHook = std::function<void(InstructionStatus&)>;
 
-  CPU6502();
-  ~CPU6502();
+  CPU6502()          = default;
+  virtual ~CPU6502() = default;
 
   template <typename T>
   void pushStack(T val) {

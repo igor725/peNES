@@ -24,7 +24,6 @@ add_executable(peNES
   src/cpu.cpp
   src/apu.cpp
   src/ppu.cpp
-  src/mmu.cpp
   src/ines.cpp
   src/cpuhooks.cpp
   ${PENES_PLAT}

@@ -6,7 +6,7 @@
 
 class CNROM: public Mapper {
   public:
-  CNROM(iNES* c): Mapper(c) { setBank(0); }
+  CNROM(iNES* c): Mapper(c, true /* No bus conflicts handled yet */) { setBank(0); }
 
   uint8_t cpuOperation(bool isWrite, uint16_t addr, uint8_t value) final {
     if (addr >= 0x6000 && addr <= 0x7FFF) return handleBattery(isWrite, addr & 0x1FFF, value);

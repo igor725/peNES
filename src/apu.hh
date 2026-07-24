@@ -1,12 +1,12 @@
 #pragma once
 
-#include "cpu.hh"
-
 #include <array>
 #include <cstdint>
 #include <functional>
 #include <optional>
 #include <span>
+
+class CPU6502;
 
 class APU {
   static constexpr double   BASE_APU_FREQUENCY  = 1789773.0;
