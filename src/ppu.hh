@@ -58,6 +58,13 @@ class PPU: public MMU {
   static constexpr uint8_t  SPRITE_FLIP_HORIZ      = 0x40;
   static constexpr uint8_t  SPRITE_FLIP_VERTI      = 0x80;
 
+  enum class MirroringMode {
+    OneScreenLow,
+    OneScreenUp,
+    Vertical,
+    Horizontal,
+  };
+
   struct PPUState {
     struct {
       uint8_t C = 0;
@@ -120,7 +127,7 @@ class PPU: public MMU {
 
   void setRegionMode(RegionMode rg) { m_timing = &REGION_TIMINGS[static_cast<uint8_t>(rg)]; }
 
-  void setMirroring(bool value) { m_mirrorVertically = value; }
+  void setMirroring(MirroringMode value) { m_mirroring = value; }
 
   void setScanlineHook(ScanlineHook&& hook) { m_scanlineHook = std::move(hook); }
 
@@ -144,8 +151,8 @@ class PPU: public MMU {
 
   PPUState m_state;
 
-  bool m_frameReady       = false;
-  bool m_mirrorVertically = false;
+  bool          m_frameReady = false;
+  MirroringMode m_mirroring  = MirroringMode::Horizontal;
 
   uint32_t m_frameBuffer[256 * 240];
 

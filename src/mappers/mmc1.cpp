@@ -120,6 +120,21 @@ class MMC1: public Mapper {
         m_prgOff[1] = (m_cartridge->hdr.getProgNum() - 1) * 0x4000;
       } break;
     }
+
+    switch (m_ctlReg & 0x03) {
+      case 0x00: {
+        m_mirroring = PPU::MirroringMode::OneScreenLow;
+      } break;
+      case 0x01: {
+        m_mirroring = PPU::MirroringMode::OneScreenUp;
+      } break;
+      case 0x02: {
+        m_mirroring = PPU::MirroringMode::Vertical;
+      } break;
+      case 0x03: {
+        m_mirroring = PPU::MirroringMode::Horizontal;
+      } break;
+    }
   }
 };
 

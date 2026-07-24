@@ -42,7 +42,7 @@ class MMC3: public Mapper {
         }
       } else if (addr >= 0xA000 && addr <= 0xBFFF) {
         if (isEven) /* Swap mirroring */ {
-          m_cartridge->hdr.flags.mirroring = !value;
+          m_mirroring = value ? PPU::MirroringMode::Horizontal : PPU::MirroringMode::Vertical;
         } else {
           // ???
         }

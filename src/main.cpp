@@ -187,12 +187,12 @@ struct Console {
       // Let mapper handle this stuff
       auto const ret = _cartridge.getMapper()->cpuOperation(isWrite, addr, value);
       if (isWrite) /* Temporary hack (probably), just in case if Mapper switched mirroring*/ {
-        _ppu.setMirroring(_cartridge->hdr.isVerticalMirror());
+        _ppu.setMirroring(_cartridge.getMapper()->getMirroringMode());
       }
       return ret;
     });
 
-    _ppu.setMirroring(_cartridge->hdr.isVerticalMirror());
+    _ppu.setMirroring(_cartridge.getMapper()->getMirroringMode());
     _cpu.reset();
 
     _thread = setupThread();

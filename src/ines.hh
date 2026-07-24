@@ -126,8 +126,6 @@ class iNES: public PlatImpl {
         }
         return true;
       }
-
-      inline bool isVerticalMirror() const { return flags.mirroring == 1; }
     } hdr;
 
     uint8_t data[];

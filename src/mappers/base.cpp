@@ -44,3 +44,7 @@ MapperDumper Mapper::prepareMapperDumper(std::vector<uint8_t>& state) {
 
   return rst;
 }
+
+PPU::MirroringMode Mapper::getMirroringMode() const {
+  return m_mirroring.has_value() ? *m_mirroring : (m_cartridge->hdr.flags.mirroring ? PPU::MirroringMode::Vertical : PPU::MirroringMode::Horizontal);
+}

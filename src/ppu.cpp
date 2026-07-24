@@ -15,10 +15,12 @@ PPU::~PPU() {}
 uint16_t PPU::getNametableMirroringOffset(uint16_t addr) {
   addr &= 0x1FFF;
 
-  if (m_mirrorVertically) {
-    return addr & 0x3FF + (addr >= 0x400 && addr < 0x800 ? 0x400 : 0) + (addr >= 0xC00 ? 0x400 : 0);
-  } else {
-    return addr < 0x800 ? addr & 0x3FF : (addr & 0x3FF) + 0x400;
+  switch (m_mirroring) {
+    case MirroringMode::OneScreenLow: return addr & 0x3FF;
+    case MirroringMode::OneScreenUp: return (addr & 0x3FF) + 0x400;
+    case MirroringMode::Vertical: return addr & 0x3FF + (addr >= 0x400 && addr < 0x800 ? 0x400 : 0) + (addr >= 0xC00 ? 0x400 : 0);
+    case MirroringMode::Horizontal: return addr < 0x800 ? addr & 0x3FF : (addr & 0x3FF) + 0x400;
+    default: throw;
   }
 }
 

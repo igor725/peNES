@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../ppu.hh"
 #include "dumper.hh"
 
 #include <cstdint>
@@ -27,6 +28,8 @@ class Mapper {
 
   virtual bool nextScanline() { return false; };
 
+  PPU::MirroringMode getMirroringMode() const;
+
   protected:
   MapperDumper       prepareMapperDumper() const;
   MapperDumper       prepareMapperDumper(std::vector<uint8_t>& state);
@@ -36,8 +39,9 @@ class Mapper {
 
   iNES const& m_cartridge;
 
-  std::vector<uint8_t> m_chrRam = {};
-  std::vector<uint8_t> m_prgRam = {};
+  std::vector<uint8_t>              m_chrRam    = {};
+  std::vector<uint8_t>              m_prgRam    = {};
+  std::optional<PPU::MirroringMode> m_mirroring = {};
 
   uint32_t m_progBaseOff = 0;
   uint32_t m_charBaseOff = 0;
