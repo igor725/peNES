@@ -32,6 +32,7 @@ MapperDumper Mapper::prepareMapperDumper() const {
 
   dump.push(m_chrRam);
   dump.push(m_prgRam);
+  dump.push(getMirroringMode());
 
   return dump;
 }
@@ -39,8 +40,9 @@ MapperDumper Mapper::prepareMapperDumper() const {
 MapperDumper Mapper::prepareMapperDumper(std::vector<uint8_t>& state) {
   MapperDumper rst(state);
 
-  m_chrRam = rst.pop<decltype(m_chrRam)>();
-  m_prgRam = rst.pop<decltype(m_prgRam)>();
+  m_chrRam    = rst.pop<decltype(m_chrRam)>();
+  m_prgRam    = rst.pop<decltype(m_prgRam)>();
+  m_mirroring = rst.pop<PPU::MirroringMode>();
 
   return rst;
 }
