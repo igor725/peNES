@@ -67,12 +67,10 @@ FetchContent_Declare(
 message("Downloading SDL3...")
 FetchContent_MakeAvailable(sdl3)
 
-target_link_libraries(peNES PRIVATE SDL3::SDL3-static)
-
 target_compile_features(peNES_opts INTERFACE cxx_std_23)
 target_compile_options(peNES_opts INTERFACE -march=native)
 target_link_options(peNES_opts INTERFACE -march=native)
-target_link_libraries(peNES_opts INTERFACE peNES_mappers)
+target_link_libraries(peNES_opts INTERFACE SDL3::SDL3-static peNES_mappers)
 target_link_libraries(peNES PRIVATE peNES_gui)
 
 if(PENES_ENABLE_ASAN)
