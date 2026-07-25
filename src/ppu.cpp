@@ -229,7 +229,7 @@ void PPU::findSpritesOnScanline() {
 void PPU::pixelEval() {
   if (m_state.regs.M & (MASK_DRAW_SPRITE | MASK_DRAW_BG)) {
     if (m_state.cycle == 0) findSpritesOnScanline();
-    if (m_state.scanline < 240) {
+    if (m_state.scanline < PPU_FRAMEBUFFER_HEIGHT) {
       if (m_state.cycle <= 255 || (m_state.cycle >= 320 && m_state.cycle <= 340)) {
         if (m_state.cycle <= 255) {
           uint8_t bgColor = 0;

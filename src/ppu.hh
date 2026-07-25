@@ -34,6 +34,7 @@ class PPU: public MMU<uint16_t, 0, 0x1FFF, 32> {
 
   public:
   static constexpr uint16_t PPU_FRAMEBUFFER_PITCH  = 0x100;
+  static constexpr uint16_t PPU_FRAMEBUFFER_HEIGHT = 0x0f0;
   static constexpr uint8_t  CTRL_NAMETAB_SELECT    = 0x03;
   static constexpr uint8_t  CTRL_VRAM_INCREMENT    = 0x04;
   static constexpr uint8_t  CTRL_SPR_TAB_ADDR      = 0x08;
@@ -154,7 +155,7 @@ class PPU: public MMU<uint16_t, 0, 0x1FFF, 32> {
   bool          m_frameReady = false;
   MirroringMode m_mirroring  = MirroringMode::Horizontal;
 
-  uint32_t m_frameBuffer[256 * 240];
+  uint32_t m_frameBuffer[PPU_FRAMEBUFFER_PITCH * PPU_FRAMEBUFFER_HEIGHT];
 
   RegionTiming const* m_timing = &REGION_TIMINGS[0];
 };

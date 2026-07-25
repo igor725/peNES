@@ -296,7 +296,7 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 32> {
   struct EvalAddress {
     bool    zeroPage    : 1 = false;
     bool    validAddr   : 1 = true;
-    bool    buggy       : 1 = false;
+    bool    buggy       : 1 = false; // Emulate 6502 JMP indirect bug
     uint8_t cyclesTaken : 4 = 0;
 
     uint8_t  offset      = 0;

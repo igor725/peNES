@@ -4,6 +4,7 @@
 #include <exception>
 #include <format>
 #include <iterator>
+#include <magic_enum/magic_enum.hpp>
 
 #if PENES_MICROPROFILE
 #include <microprofile.h>
@@ -20,87 +21,7 @@ std::string CPU6502::InstructionStatus::buildMnemonic(bool withAddr) const {
 
   if (withAddr) std::format_to(std::back_inserter(temp), "${:X} ", startAddr);
 
-  switch (flags.mnemonic) {
-    case Mnemonic::ADC: temp.append("ADC"); break;
-    case Mnemonic::AND: temp.append("AND"); break;
-    case Mnemonic::ASL: temp.append("ASL"); break;
-    case Mnemonic::BCC: temp.append("BCC"); break;
-    case Mnemonic::BCS: temp.append("BCS"); break;
-    case Mnemonic::BEQ: temp.append("BEQ"); break;
-    case Mnemonic::BIT: temp.append("BIT"); break;
-    case Mnemonic::BMI: temp.append("BMI"); break;
-    case Mnemonic::BNE: temp.append("BNE"); break;
-    case Mnemonic::BPL: temp.append("BPL"); break;
-    case Mnemonic::BRK: temp.append("BRK"); break;
-    case Mnemonic::BVC: temp.append("BVC"); break;
-    case Mnemonic::BVS: temp.append("BVS"); break;
-    case Mnemonic::CLC: temp.append("CLC"); break;
-    case Mnemonic::CLD: temp.append("CLD"); break;
-    case Mnemonic::CLI: temp.append("CLI"); break;
-    case Mnemonic::CLV: temp.append("CLV"); break;
-    case Mnemonic::CMP: temp.append("CMP"); break;
-    case Mnemonic::CPX: temp.append("CPX"); break;
-    case Mnemonic::CPY: temp.append("CPY"); break;
-    case Mnemonic::DEC: temp.append("DEC"); break;
-    case Mnemonic::DEX: temp.append("DEX"); break;
-    case Mnemonic::DEY: temp.append("DEY"); break;
-    case Mnemonic::EOR: temp.append("EOR"); break;
-    case Mnemonic::INC: temp.append("INC"); break;
-    case Mnemonic::INX: temp.append("INX"); break;
-    case Mnemonic::INY: temp.append("INY"); break;
-    case Mnemonic::JMP: temp.append("JMP"); break;
-    case Mnemonic::JSR: temp.append("JSR"); break;
-    case Mnemonic::LDA: temp.append("LDA"); break;
-    case Mnemonic::LDX: temp.append("LDX"); break;
-    case Mnemonic::LDY: temp.append("LDY"); break;
-    case Mnemonic::LSR: temp.append("LSR"); break;
-    case Mnemonic::NOP: temp.append("NOP"); break;
-    case Mnemonic::ORA: temp.append("ORA"); break;
-    case Mnemonic::PHA: temp.append("PHA"); break;
-    case Mnemonic::PHP: temp.append("PHP"); break;
-    case Mnemonic::PLA: temp.append("PLA"); break;
-    case Mnemonic::PLP: temp.append("PLP"); break;
-    case Mnemonic::ROL: temp.append("ROL"); break;
-    case Mnemonic::ROR: temp.append("ROR"); break;
-    case Mnemonic::RTI: temp.append("RTI"); break;
-    case Mnemonic::RTS: temp.append("RTS"); break;
-    case Mnemonic::SBC: temp.append("SBC"); break;
-    case Mnemonic::SEC: temp.append("SEC"); break;
-    case Mnemonic::SED: temp.append("SED"); break;
-    case Mnemonic::SEI: temp.append("SEI"); break;
-    case Mnemonic::STA: temp.append("STA"); break;
-    case Mnemonic::STX: temp.append("STX"); break;
-    case Mnemonic::STY: temp.append("STY"); break;
-    case Mnemonic::TAX: temp.append("TAX"); break;
-    case Mnemonic::TAY: temp.append("TAY"); break;
-    case Mnemonic::TSX: temp.append("TSX"); break;
-    case Mnemonic::TXA: temp.append("TXA"); break;
-    case Mnemonic::TXS: temp.append("TXS"); break;
-    case Mnemonic::TYA: temp.append("TYA"); break;
-
-    case Mnemonic::SLO: temp.append("SLO"); break;
-    case Mnemonic::RLA: temp.append("RLA"); break;
-    case Mnemonic::SRE: temp.append("SRE"); break;
-    case Mnemonic::RRA: temp.append("RRA"); break;
-    case Mnemonic::SAX: temp.append("SAX"); break;
-    case Mnemonic::LAX: temp.append("LAX"); break;
-    case Mnemonic::DCP: temp.append("DCP"); break;
-    case Mnemonic::ISC: temp.append("ISC"); break;
-    case Mnemonic::SHA: temp.append("SHA"); break;
-    case Mnemonic::SHS: temp.append("SHS"); break;
-    case Mnemonic::SHY: temp.append("SHY"); break;
-    case Mnemonic::SHX: temp.append("SHX"); break;
-    case Mnemonic::LAE: temp.append("LAE"); break;
-    case Mnemonic::ANC: temp.append("ANC"); break;
-    case Mnemonic::ASR: temp.append("ASR"); break;
-    case Mnemonic::ARR: temp.append("ARR"); break;
-    case Mnemonic::ANE: temp.append("ANE"); break;
-    case Mnemonic::LXA: temp.append("LXA"); break;
-    case Mnemonic::AXS: temp.append("AXS"); break;
-
-    default: std::format_to(std::back_inserter(temp), "${:02X}", holder.raw); break;
-  }
-
+  temp.append(magic_enum::enum_name(flags.mnemonic));
   temp.push_back(' ');
 
   switch (flags.addrMode) {

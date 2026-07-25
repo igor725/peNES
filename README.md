@@ -49,7 +49,6 @@ curl -L http://127.0.0.1:8486/path/to/a/totally/legal/storage/of/manually/dumped
 
 ### Supported arguments
 * `--volume [0...1]` - Set the master volume for the emulator, defaults to `0.3`
-* `--hook [string]` - Set one of built-in CPU hooks, defaults to `null`. Possible values: `verbosetest`, `heatmap`, `test`, `used`. For details see [cpuhooks.cpp](./src/cpuhooks.cpp)
 * `--skipvalid` - Skip NES dump validation and try to run it anyways, the game might run into even more issues than usual if it's fails the validation
 
 Currently the emulator supports only Unix-like systems, it was tested on Arch Linux only so far.
@@ -58,6 +57,7 @@ Currently the emulator supports only Unix-like systems, it was tested on Arch Li
 On gamepad you can use DPAD to navigate, A/B buttons to make actions, Y to cause CPU to reset, Select/Start to pick options. LB/RB to save/restore current enulation state.
 
 Keyboard bindings:
+* G - Open debugger menu
 * Escape - Reset CPU
 * Arrows - Navigate
 * Z/X - Action buttons
@@ -68,7 +68,13 @@ Keyboard bindings:
 * F3 - Set heatmap printing threshold to 100
 
 ## Dependencies
-* SDL3 (optional, headless run is possible)
+> [!NOTE]
+> All of them will be downloaded automatically through CMake's FetchContent module.
+
+* SDL3
+* magic_enum
+* ImGui
+* microprofile (optional, will be download only if CMake flag specified)
 
 ## AI usage disclosure
 AI was used extensively to consult about NES' PPU and mappers architecture and summarize documentations. All the main architectural decisions, algorithms were made by me.
