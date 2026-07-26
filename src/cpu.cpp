@@ -104,36 +104,21 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
           status << Mnemonic::BRK << AddrMode::Implied;
           return postExecHook(status, interrupt(0xFFFE, true));
         } break;
-        case 0x01: /* NOP zp (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::ZeroPage;
-          return postExecHook(status, 3);
-        } break;
+        case 0x01: /* NOP zp (illegal) */ status << Mnemonic::NOP << AddrMode::ZeroPage; break;
         case 0x02: /* PHP impl */ {
           status << Mnemonic::PHP << AddrMode::Implied;
           pushStatus(true);
           return postExecHook(status, 3);
         } break;
-        case 0x03: /* NOP abs (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::Absolute;
-          readMem<uint16_t>(status.operand.u16); // Dummy read
-          return postExecHook(status, 4);
-        } break;
-        case 0x05: /* NOP zp,X (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::ZeroPageX;
-          readMemByte(evaluateOperandToAddr(status)); // Dummy read
-          return postExecHook(status, 4);
-        } break;
+        case 0x03: /* NOP abs (illegal) */ status << Mnemonic::NOP << AddrMode::Absolute; break;
+        case 0x05: /* NOP zp,X (illegal) */ status << Mnemonic::NOP << AddrMode::ZeroPageX; break;
         case 0x06: /* CLC impl */ {
           status << Mnemonic::CLC << AddrMode::Implied;
 
           m_state.regs.SR.C = 0;
           return postExecHook(status, 2);
         } break;
-        case 0x07: /* NOP abs,X (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::AbsoluteX;
-          readMemByte(evaluateOperandToAddr(status)); // Dummy read
-          return postExecHook(status, 4);
-        } break;
+        case 0x07: /* NOP abs,X (illegal) */ status << Mnemonic::NOP << AddrMode::AbsoluteX; break;
       }
     } break;
     case 0x01: {
@@ -169,22 +154,14 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
           m_state.regs.SR.V = (test & 0x40) > 0;
           return postExecHook(status, 4);
         } break;
-        case 0x05: /* NOP zp,X (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::ZeroPageX;
-          readMemByte(evaluateOperandToAddr(status)); // Dummy read
-          return postExecHook(status, 4);
-        } break;
+        case 0x05: /* NOP zp,X (illegal) */ status << Mnemonic::NOP << AddrMode::ZeroPageX; break;
         case 0x06: /* SEC impl */ {
           status << Mnemonic::SEC << AddrMode::Implied;
 
           m_state.regs.SR.C = 1;
           return postExecHook(status, 2);
         } break;
-        case 0x07: /* NOP abs,X (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::AbsoluteX;
-          readMemByte(evaluateOperandToAddr(status)); // Dummy read
-          return postExecHook(status, 4);
-        } break;
+        case 0x07: /* NOP abs,X (illegal) */ status << Mnemonic::NOP << AddrMode::AbsoluteX; break;
       }
     } break;
     case 0x02: {
@@ -196,11 +173,7 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
           m_state.regs.PC      = popStack<uint16_t>();
           return postExecHook(status, 6);
         } break;
-        case 0x01: /* NOP zp (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::ZeroPage;
-          readMemByte(evaluateOperandToAddr(status)); // Dummy read
-          return postExecHook(status, 3);
-        } break;
+        case 0x01: /* NOP zp (illegal) */ status << Mnemonic::NOP << AddrMode::ZeroPage; break;
         case 0x02: /* PHA impl */ {
           status << Mnemonic::PHA << AddrMode::Implied;
 
@@ -213,21 +186,13 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
           m_state.regs.PC = status.operand.u16;
           return postExecHook(status, 3);
         } break;
-        case 0x05: /* NOP zp,X (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::ZeroPageX;
-          readMemByte(evaluateOperandToAddr(status)); // Dummy read
-          return postExecHook(status, 4);
-        } break;
+        case 0x05: /* NOP zp,X (illegal) */ status << Mnemonic::NOP << AddrMode::ZeroPageX; break;
         case 0x06: /* CLI impl */ {
           status << Mnemonic::CLI << AddrMode::Implied;
           m_state.intrClrSchd = true;
           return postExecHook(status, 2);
         } break;
-        case 0x07: /* NOP abs,X (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::AbsoluteX;
-          readMemByte(evaluateOperandToAddr(status)); // Dummy read
-          return postExecHook(status, 4);
-        } break;
+        case 0x07: /* NOP abs,X (illegal) */ status << Mnemonic::NOP << AddrMode::AbsoluteX; break;
       }
     } break;
     case 0x03: {
@@ -256,22 +221,14 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
           m_state.regs.PC = evaluateOperandToValue<uint16_t>(status).value;
           return postExecHook(status, 5);
         } break;
-        case 0x05: /* NOP zp,X (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::ZeroPageX;
-          readMemByte(evaluateOperandToAddr(status)); // Dummy read
-          return postExecHook(status, 4);
-        } break;
+        case 0x05: /* NOP zp,X (illegal) */ status << Mnemonic::NOP << AddrMode::ZeroPageX; break;
         case 0x06: /* SEI impl */ {
           status << Mnemonic::SEI << AddrMode::Implied;
 
           m_state.regs.SR.I = true;
           return postExecHook(status, 2);
         } break;
-        case 0x07: /* NOP abs,X (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::AbsoluteX;
-          readMemByte(evaluateOperandToAddr(status)); // Dummy read
-          return postExecHook(status, 4);
-        } break;
+        case 0x07: /* NOP abs,X (illegal) */ status << Mnemonic::NOP << AddrMode::AbsoluteX; break;
       }
     } break;
     case 0x04: {
@@ -427,11 +384,7 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
           m_state.regs.SR.D = false;
           return postExecHook(status, 2);
         } break;
-        case 0x07: /* NOP abs,X (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::AbsoluteX;
-          readMemByte(evaluateOperandToAddr(status)); // Dummy read
-          return postExecHook(status, 4);
-        } break;
+        case 0x07: /* NOP abs,X (illegal) */ status << Mnemonic::NOP << AddrMode::AbsoluteX; break;
       }
     } break;
     case 0x07: {
@@ -476,27 +429,21 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
           m_state.regs.SR.N = (val & 0x80) > 0;
           return postExecHook(status, 4);
         } break;
-        case 0x05: /* NOP zp,X (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::ZeroPageX;
-          evaluateOperandToValue<uint8_t>(status); // Dummy read
-          return postExecHook(status, 4);
-        } break;
+        case 0x05: /* NOP zp,X (illegal) */ status << Mnemonic::NOP << AddrMode::ZeroPageX; break;
         case 0x06: /* SED impl */ {
           status << Mnemonic::SED << AddrMode::Implied;
 
           m_state.regs.SR.D = 1;
           return postExecHook(status, 2);
         } break;
-        case 0x07: /* NOP abs,X (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::AbsoluteX;
-          readMemByte(evaluateOperandToAddr(status)); // Dummy read
-          return postExecHook(status, 4);
-        } break;
+        case 0x07: /* NOP abs,X (illegal) */ status << Mnemonic::NOP << AddrMode::AbsoluteX; break;
       }
     } break;
   }
 
-  throw;
+  /* All control class NOPs fallthrough here */
+  auto const eval = evaluateOperandToValue<uint8_t>(status);
+  return postExecHook(status, 2 + eval.cyclesTaken);
 }
 
 uint8_t CPU6502::handleMath(InstructionStatus& status) {
@@ -621,7 +568,7 @@ uint8_t CPU6502::handleMath(InstructionStatus& status) {
     } break;
   }
 
-  throw;
+  std::unreachable();
 }
 
 uint8_t CPU6502::handleShift(InstructionStatus& status) {
@@ -631,7 +578,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
 
       uint8_t origValue = 0, resultValue = 0, cycles = 0;
       switch (status.getAddrMode()) {
-        case 0x00: /* JAM */ return 0;
+        case 0x00: /* JAM */ throw;
         case 0x01: /* ASL zp */ status << AddrMode::ZeroPage; break;
         case 0x02: /* ASL A */ {
           status << AddrMode::Accum;
@@ -644,10 +591,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
         case 0x03: /* ASL abs */ status << AddrMode::Absolute; break;
         case 0x04: /* JAM */ throw;
         case 0x05: /* ASL zp,X */ status << AddrMode::ZeroPageX; break;
-        case 0x06: /* NOP impl (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::Implied;
-          return postExecHook(status, 2);
-        } break;
+        case 0x06: /* NOP impl (illegal) */ status << Mnemonic::NOP << AddrMode::Implied; goto shift_NOPs;
         case 0x07: /* ASL abs,X */ cycles += 1, status << AddrMode::AbsoluteX; break;
       }
 
@@ -670,7 +614,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
 
       status << Mnemonic::ROL;
       switch (status.getAddrMode()) {
-        case 0x00: /* JAM */ return 0;
+        case 0x00: /* JAM */ throw;
         case 0x01: /* ROL zp */ status << AddrMode::ZeroPage; break;
         case 0x02: /* ROL A */ {
           status << AddrMode::Accum;
@@ -683,10 +627,8 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
         case 0x03: /* ROL abs */ status << AddrMode::Absolute; break;
         case 0x04: /* JAM */ throw;
         case 0x05: /* ROL zp,X */ status << AddrMode::ZeroPageX; break;
-        case 0x06: /* NOP impl (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::Implied;
-          return postExecHook(status, 2);
-        } break;
+        case 0x06: /* NOP impl (illegal) */ status << Mnemonic::NOP << AddrMode::Implied; goto shift_NOPs;
+
         case 0x07: /* ROL abs,X */ cycles += 1, status << AddrMode::AbsoluteX; break;
       }
 
@@ -722,10 +664,8 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
         case 0x03: /* LSR abs */ status << AddrMode::Absolute; break;
         case 0x04: /* JAM */ throw;
         case 0x05: /* LSR zp,X */ status << AddrMode::ZeroPageX; break;
-        case 0x06: /* NOP impl (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::Implied;
-          return postExecHook(status, 2);
-        } break;
+        case 0x06: /* NOP impl (illegal) */ status << Mnemonic::NOP << AddrMode::Implied; goto shift_NOPs;
+
         case 0x07: /* LSR abs,X */ cycles += 1, status << AddrMode::AbsoluteX; break;
       }
 
@@ -760,10 +700,8 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
         case 0x03: /* ROR abs */ status << Mnemonic::ROR << AddrMode::Absolute; break;
         case 0x04: /* JAM */ throw;
         case 0x05: /* ROR zp,X */ status << Mnemonic::ROR << AddrMode::ZeroPageX; break;
-        case 0x06: /* NOP impl (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::Implied;
-          return postExecHook(status, 2);
-        } break;
+        case 0x06: /* NOP impl (illegal) */ status << Mnemonic::NOP << AddrMode::Implied; goto shift_NOPs;
+
         case 0x07: /* ROR abs,X */ cycles += 1, status << Mnemonic::ROR << AddrMode::AbsoluteX; break;
       }
 
@@ -783,10 +721,8 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
     } break;
     case 0x04: {
       switch (status.getAddrMode()) {
-        case 0x00: /* NOP imm (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::Immediate;
-          return postExecHook(status, 2);
-        } break;
+        case 0x00: /* NOP imm (illegal) */ status << Mnemonic::NOP << AddrMode::Immediate; goto shift_NOPs;
+
         case 0x01: /* STX zp */ {
           status << Mnemonic::STX << AddrMode::ZeroPage;
 
@@ -843,7 +779,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
           goto leave_early_XSET;
         } break;
         case 0x03: /* LDX abs */ status << Mnemonic::LDX << AddrMode::Absolute; break;
-        case 0x04: throw;
+        case 0x04: /* JAM */ throw;
         case 0x05: /* LDX zp,Y */ status << Mnemonic::LDX << AddrMode::ZeroPageY; break;
         case 0x06: /* TSX */ {
           status << Mnemonic::TSX << AddrMode::Implied;
@@ -872,10 +808,8 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
 
       status << Mnemonic::DEC;
       switch (status.getAddrMode()) {
-        case 0x00: /*  NOP imm (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::Immediate;
-          return postExecHook(status, 2);
-        } break;
+        case 0x00: /*  NOP imm (illegal) */ status << Mnemonic::NOP << AddrMode::Immediate; goto shift_NOPs;
+
         case 0x01: /* DEC zp */ status << AddrMode::ZeroPage; break;
         case 0x02: /* DEX */ {
           status << Mnemonic::DEX << AddrMode::Implied;
@@ -888,10 +822,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
         case 0x03: /* DEC abs */ status << AddrMode::Absolute; break;
         case 0x04: /* JAM */ throw;
         case 0x05: /* DEC zp,X */ status << AddrMode::ZeroPageX; break;
-        case 0x06: /* NOP impl (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::Implied;
-          return postExecHook(status, 2);
-        } break;
+        case 0x06: /* NOP impl (illegal) */ status << Mnemonic::NOP << AddrMode::Implied; goto shift_NOPs;
         case 0x07: /* DEC abs,X */ cycles += 1, status << AddrMode::AbsoluteX; break;
       }
 
@@ -913,22 +844,13 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
 
       status << Mnemonic::INC;
       switch (status.getAddrMode()) {
-        case 0x00: /* NOP imm (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::Immediate;
-          return postExecHook(status, 2);
-        } break;
+        case 0x00: /* NOP imm (illegal) */ status << Mnemonic::NOP << AddrMode::Immediate; goto shift_NOPs;
         case 0x01: /* INC zp */ status << AddrMode::ZeroPage; break;
-        case 0x02: /* NOP impl (legal) */ {
-          status << Mnemonic::NOP << AddrMode::Implied;
-          return postExecHook(status, 2);
-        } break;
+        case 0x02: /* NOP impl (legal) */ status << Mnemonic::NOP << AddrMode::Implied; goto shift_NOPs;
         case 0x03: /* INC abs */ status << AddrMode::Absolute; break;
         case 0x04: /* JAM */ throw;
         case 0x05: /* INC zp,X */ status << AddrMode::ZeroPageX; break;
-        case 0x06: /* NOP impl (illegal) */ {
-          status << Mnemonic::NOP << AddrMode::Implied;
-          return postExecHook(status, 2);
-        } break;
+        case 0x06: /* NOP impl (illegal) */ status << Mnemonic::NOP << AddrMode::Implied; goto shift_NOPs;
         case 0x07: /* INC abs,X */ cycles += 1, status << AddrMode::AbsoluteX; break;
       }
 
@@ -946,7 +868,14 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
     } break;
   }
 
-  throw;
+shift_NOPs:
+  /* All control class NOPs fallthrough here */
+  uint8_t cyclesTaken = 2;
+  if (status.flags.addrMode != AddrMode::Implied) {
+    auto const eval = evaluateOperandToValue<uint8_t>(status);
+    cyclesTaken += eval.cyclesTaken;
+  }
+  return postExecHook(status, cyclesTaken);
 }
 
 uint8_t CPU6502::handleIllegal(InstructionStatus& status) { /* All instructions below are illegal */
@@ -1155,16 +1084,14 @@ uint8_t CPU6502::step() {
   if (m_brkpt.type == CPUBreak::Type::Exec && m_brkpt.address == m_state.regs.PC) m_brkpt.func();
   if (m_state.nmiTriggered) {
     m_state.nmiTriggered = false;
-    interrupt(0xFFFA, false);
-    return 0;
+    return interrupt(0xFFFA, false);
   }
   if (m_state.intrClrSchd) {
     m_state.intrClrSchd = false;
     m_state.regs.SR.I   = 0;
   } else if (m_state.regs.SR.I == 0 && m_state.irqTriggered) {
     m_state.irqTriggered = false;
-    interrupt(0xFFFE, false);
-    return 0;
+    return interrupt(0xFFFE, false);
   }
 
   InstructionStatus s {
