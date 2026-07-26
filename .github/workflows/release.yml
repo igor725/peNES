@@ -2,6 +2,12 @@ name: build peNES
 
 on:
   push:
+    paths:
+      - '**/CMakeLists.txt'
+      - '**/*.cmake'
+      - '**/*.cpp'
+      - '**/*.hh'
+      - '.github/workflows/**'
 
 jobs:
   build:
