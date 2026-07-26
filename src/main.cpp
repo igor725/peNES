@@ -1,6 +1,6 @@
 #include "cmdline.hh"
 #include "console.hh"
-#include "gui/base.hh"
+#include "gui/gbase.hh"
 #include "ines.hh"
 
 #include <SDL3/SDL_audio.h>
@@ -105,8 +105,9 @@ int32_t main(int32_t argc, char* argv[]) {
 
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
-      gui.forwardEvent(&ev);
+      if (guiActive) gui.forwardEvent(&ev);
       switch (ev.type) {
+        case SDL_EVENT_SYSTEM_THEME_CHANGED: gui.updateTheme(); break;
         case SDL_EVENT_WINDOW_FOCUS_GAINED:
         case SDL_EVENT_WINDOW_FOCUS_LOST: nes._apu.setOutputEnabled(ev.type == SDL_EVENT_WINDOW_FOCUS_GAINED); break;
 

@@ -74,6 +74,7 @@ Keyboard bindings:
 * SDL3
 * magic_enum
 * ImGui
+* imgui_hex_editor
 * microprofile (optional, will be download only if CMake flag specified)
 
 ## AI usage disclosure
