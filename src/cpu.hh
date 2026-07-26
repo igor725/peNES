@@ -68,6 +68,15 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 32> {
   public:
   static constexpr uint32_t BASE_CLOCK_FREQUENCY = 1789773;
 
+  struct CPUBreak {
+    using Func = std::function<void()>;
+    enum class Type : uint8_t { Disabled, Exec, Write, Read };
+
+    Type     type    = Type::Disabled;
+    uint16_t address = 0;
+    Func     func    = {};
+  };
+
   struct CPUState {
     Registers regs;
 
@@ -368,9 +377,9 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 32> {
   void    triggerNMI();
   void    triggerIRQ();
 
-  Registers& exposeState() { return m_state.regs; }
-
   void setHook(CPUHook&& hook) { m_hook = std::move(hook); }
+
+  void setBreakpoint(CPUBreak&& brk) { m_brkpt = std::move(brk); }
 
   template <typename T>
   T readMem(EvalAddress const& addr) const {
@@ -391,6 +400,8 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 32> {
   }
 
   CPUState dumpState() const { return m_state; }
+
+  CPUState& exposeState() { return m_state; }
 
   void restoreState(CPUState& state) { m_state = std::move(state); }
 
@@ -440,6 +451,7 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 32> {
   uint8_t interrupt(uint16_t vector, bool software = false);
 
   private:
+  CPUBreak m_brkpt;
   CPUState m_state;
   CPUHook  m_hook;
 };

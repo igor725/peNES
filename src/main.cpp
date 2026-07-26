@@ -166,7 +166,7 @@ int32_t main(int32_t argc, char* argv[]) {
        * TODO: Adjust this lock to the monitor's flip rate?
        * Something like WaitDuration = (1 / RefreshRate) - 30us (ImGui's drawing headroom)
        */
-      auto const lock = nes.tryLock(std::chrono::milliseconds(4));
+      auto const lock = nes.mkLock(std::chrono::milliseconds(4));
 
       if (lock.owns_lock()) nes._padBtns = currPadState;
       if (auto frame = nes.step(lock); !frame.empty()) {

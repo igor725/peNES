@@ -12,10 +12,13 @@
 #include <thread>
 
 struct Console {
-  using Clock     = std::chrono::steady_clock;
-  using Delta     = std::chrono::duration<double>;
-  using Mutex     = std::shared_timed_mutex;
-  using LockTmRes = std::chrono::milliseconds;
+  using Clock      = std::chrono::steady_clock;
+  using Delta      = std::chrono::duration<double>;
+  using Mutex      = std::shared_timed_mutex;
+  using SharedLock = std::shared_lock<Mutex>;
+  using UniqueLock = std::unique_lock<Mutex>;
+  using GuardLock  = std::lock_guard<Mutex>;
+  using LockTmRes  = std::chrono::milliseconds;
 
   static constexpr auto TARGET_FRAMETIME = Delta(1.0 / 60.0988);
 
@@ -82,14 +85,12 @@ struct Console {
 
   void stop();
 
-  auto tryLock(LockTmRes wait = LockTmRes::max()) {
-    if (wait != LockTmRes::max()) return std::unique_lock(_sync, wait);
-    return std::unique_lock(_sync, std::try_to_lock);
+  template <typename LockType = std::unique_lock<Mutex>>
+  auto mkLock(LockTmRes wait = LockTmRes::max()) {
+    if (wait == LockTmRes(0)) return LockType(_sync, std::try_to_lock);
+    if (wait != LockTmRes::max()) return LockType(_sync, wait);
+    return LockType(_sync);
   }
-
-  auto lock() { return std::unique_lock(_sync); }
-
-  auto lockShared() { return std::shared_lock(_sync); }
 
   PPU::Frame<uint32_t> step(std::unique_lock<Mutex> const& lock);
 };

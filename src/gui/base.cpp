@@ -37,7 +37,7 @@ bool GUI::produceFrame(Console& nes) {
     if (ImGui::BeginTabBar("DbgTabs")) {
       if (ImGui::BeginTabItem("Stats")) {
         if ((updateTimer += io.DeltaTime) > 1.f) {
-          auto const lock = nes.lockShared();
+          auto const lock = nes.mkLock<Console::SharedLock>();
 
           sSpeed      = nes._speed;
           updateTimer = 0.f;
@@ -46,6 +46,9 @@ bool GUI::produceFrame(Console& nes) {
         ImGui::EndTabItem();
       }
       if (ImGui::BeginTabItem("CPU")) {
+        ImGui::EndTabItem();
+      }
+      if (ImGui::BeginTabItem("MEM")) {
         ImGui::EndTabItem();
       }
       if (ImGui::BeginTabItem("APU")) {

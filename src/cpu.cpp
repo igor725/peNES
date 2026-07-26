@@ -1,7 +1,6 @@
 #include "cpu.hh"
 
 #include <cstdint>
-#include <exception>
 #include <format>
 #include <iterator>
 #include <magic_enum/magic_enum.hpp>
@@ -10,9 +9,9 @@
 #include <microprofile.h>
 #endif
 
-class SkipInstruction: public std::exception {
+class SkipInstruction {
   public:
-  SkipInstruction() {}
+  SkipInstruction() = default;
 };
 
 std::string CPU6502::InstructionStatus::buildMnemonic(bool withAddr) const {
@@ -1153,6 +1152,7 @@ uint8_t CPU6502::step() {
 #if PENES_MICROPROFILE
   MICROPROFILE_SCOPEI("NES", "CPU Step", MP_DARKGREY);
 #endif
+  if (m_brkpt.type == CPUBreak::Type::Exec && m_brkpt.address == m_state.regs.PC) m_brkpt.func();
   if (m_state.nmiTriggered) {
     m_state.nmiTriggered = false;
     interrupt(0xFFFA, false);
@@ -1201,6 +1201,7 @@ void CPU6502::triggerIRQ() {
 uint8_t CPU6502::writeMemByte(EvalAddress const& eval, uint8_t value) {
   if (!eval.validAddr) throw;
   auto const addr = eval.getAddress();
+  if (m_brkpt.type == CPUBreak::Type::Write && m_brkpt.address == addr) m_brkpt.func();
   if (addr <= 0x1FFF) return m_state.ram[addr & 0x7ff] = value;
 
   if (auto const han = findHandler(addr)) {
@@ -1213,6 +1214,7 @@ uint8_t CPU6502::writeMemByte(EvalAddress const& eval, uint8_t value) {
 uint8_t CPU6502::readMemByte(EvalAddress const& eval) const {
   if (!eval.validAddr) throw;
   auto const addr = eval.getAddress();
+  if (m_brkpt.type == CPUBreak::Type::Read && m_brkpt.address == addr) m_brkpt.func();
   if (addr <= 0x1FFF) return m_state.ram[addr & 0x7ff];
 
   if (auto const han = findHandler(addr)) {
