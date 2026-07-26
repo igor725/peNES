@@ -61,7 +61,7 @@ void CPU6502::reset() {
 
 uint8_t CPU6502::interrupt(uint16_t vector, bool software) {
   pushStack<uint16_t>(m_state.regs.PC);
-  pushStatus(software);
+  if (vector != 0xFFFC /* Looks like reset vector should not push the status, idefk */) pushStatus(software);
   m_state.regs.SR.I = 1;
   m_state.regs.PC   = readMem<uint16_t>(vector);
   return 7;

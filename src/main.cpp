@@ -142,7 +142,7 @@ int32_t main(int32_t argc, char* argv[]) {
           }
         } break;
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
-          if (ev.gbutton.button == SDL_GAMEPAD_BUTTON_NORTH) nes._cpu.reset();
+          if (ev.gbutton.button == SDL_GAMEPAD_BUTTON_NORTH) nes.reset();
           if (ev.gbutton.button == SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) nes.saveState();
           if (ev.gbutton.button == SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) nes.restoreState();
         } /* Intentional fallthrough */

@@ -181,6 +181,11 @@ void Console::stop() {
   _wait.notify_one();
 }
 
+void Console::reset() {
+  std::lock_guard const lock(_sync);
+  _cpu.reset();
+}
+
 PPU::Frame<uint32_t> Console::step(std::unique_lock<Mutex> const& lock) {
   if (!lock.owns_lock() || !_ppu.isFrameReady()) return {};
   return _ppu.getFrame();

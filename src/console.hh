@@ -83,6 +83,8 @@ struct Console {
 
   void restoreState();
 
+  void reset();
+
   void stop();
 
   template <typename LockType = std::unique_lock<Mutex>>

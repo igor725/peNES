@@ -14,7 +14,7 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 32> {
       uint8_t I : 1;
       uint8_t D : 1;
       uint8_t B : 1;
-      uint8_t   : 1;
+      uint8_t U : 1;
       uint8_t V : 1;
       uint8_t N : 1;
     };
@@ -291,7 +291,7 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 32> {
   void pushStatus(bool software) {
     auto p = m_state.regs.SR;
 
-    p.B = software;
+    p.B = software, p.U = true;
     pushStack<uint8_t>(p._raw);
   }
 
