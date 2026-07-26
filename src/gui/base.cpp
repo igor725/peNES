@@ -2,21 +2,33 @@
 
 #include "../console.hh"
 
+#include <SDL3/SDL_render.h>
+#include <SDL3/SDL_video.h>
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_sdlrenderer3.h>
 
-void GUI::init(SDL_Window* wnd, SDL_Renderer* rend) {
+void GUI::init(SDL_Window* wnd, SDL_Renderer* rend, SDL_AudioStream* strm) {
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
   ImGui::GetIO().IniFilename = nullptr;
 
   ImGui_ImplSDL3_InitForSDLRenderer(wnd, rend);
   ImGui_ImplSDLRenderer3_Init(rend);
-  _rend = rend;
+  _rend = rend, _astrm = strm;
+  updateTheme();
+}
+
+void GUI::updateTheme() {
+  if (SDL_GetSystemTheme() == SDL_SYSTEM_THEME_LIGHT) /* User is a masochist */ {
+    ImGui::StyleColorsLight();
+  } else /* All ok with the user's head (maybe, there's possibility of "unknown theme") */ {
+    ImGui::StyleColorsDark();
+  }
 }
 
 void GUI::forwardEvent(SDL_Event const* ev) {
+  if (ev->type == SDL_EVENT_SYSTEM_THEME_CHANGED) updateTheme();
   ImGui_ImplSDL3_ProcessEvent(ev);
 }
 
@@ -25,6 +37,7 @@ bool GUI::produceFrame(Console& nes) {
 
   static float  updateTimer = 1.f;
   static double sSpeed      = 0;
+  static float  volume      = SDL_GetAudioStreamGain(_astrm);
 
   bool open = true;
 
@@ -52,6 +65,9 @@ bool GUI::produceFrame(Console& nes) {
         ImGui::EndTabItem();
       }
       if (ImGui::BeginTabItem("APU")) {
+        if (ImGui::SliderFloat("Master volume", &volume, 0.f, 1.f)) {
+          SDL_SetAudioStreamGain(_astrm, volume);
+        }
         ImGui::EndTabItem();
       }
       if (ImGui::BeginTabItem("PPU")) {

@@ -81,7 +81,7 @@ int32_t main(int32_t argc, char* argv[]) {
 
   Console nes;
   GUI     gui;
-  gui.init(window, rend);
+  gui.init(window, rend, stream);
   nes.setAudioOut(batchSize, spec.freq, [&](std::span<float const> sample) { SDL_PutAudioStreamData(stream, sample.data(), sample.size_bytes()); });
 
   try {

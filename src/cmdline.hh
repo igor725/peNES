@@ -61,8 +61,6 @@ class CmdlineParser {
   static constexpr ArgType getExpectedType(size_t hash) {
     switch (hash) {
       case HASH_STR("volume"): return ArgType::Double;
-      case HASH_STR("hook"): return ArgType::String;
-      case HASH_STR("hmthreshold"): return ArgType::Int;
       case HASH_STR("skipvalid"): return ArgType::Bool;
       default: throw UnknownCmdlineParameter();
     }
