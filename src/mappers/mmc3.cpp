@@ -83,6 +83,19 @@ class MMC3: public Mapper {
   std::vector<uint8_t> dumpState() const final {
     auto dmp = prepareMapperDumper();
 
+    dmp.push(m_irqLatch);
+    dmp.push(m_irqCounter);
+    dmp.push(m_irqEnable);
+    dmp.push(m_irqReload);
+
+    dmp.push(m_targetRegister);
+    dmp.push(m_prgMode);
+    dmp.push(m_chrMode);
+    dmp.push(m_registers);
+
+    dmp.push(m_progBanks);
+    dmp.push(m_chrBanks);
+
     return dmp.extract();
   }
 

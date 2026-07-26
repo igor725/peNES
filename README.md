@@ -26,13 +26,14 @@ The initial plan was to get it going within one day which I did successfully. Th
 > Note that "Implemented" doesn't mean "works completely flawlessly in all scenarios", a lot of games might
 > straight up break because of missing or incorrectly implemented functionality inside those mappers.
 
-- [x] MMC0
+- [x] NROM
 - [x] MMC1
 - [ ] MMC2
 - [x] MMC3
 - [ ] MMC4
 - [ ] MMC5
 - [x] CNROM
+- [x] UNROM
 
 Currently any attempt to run other mappers will result in exception.
 
