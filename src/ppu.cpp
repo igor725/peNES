@@ -122,7 +122,7 @@ uint8_t PPU::dmaWrite(uint8_t value) {
     m_state.oam[(m_state.oamAddr + i) & 0xFF] = m_cpu.readMem<uint8_t>(cpuPageAddress + i);
   }
 
-  return 0;
+  return value;
 }
 
 std::optional<uint8_t> PPU::cpuWrite(uint16_t addr, uint8_t value) {

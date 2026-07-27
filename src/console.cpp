@@ -27,7 +27,7 @@ Console::Console(): _ppu(_cpu), _apu(_cpu) {
           _padShift[1] = _padBtns[1];
         }
 
-        return 0;
+        return latch;
       }
 
       throw;
@@ -53,7 +53,7 @@ Console::Console(): _ppu(_cpu), _apu(_cpu) {
   });
 
   _ppu.setScanlineHook([&](PPU::PPUState const& state) {
-    if (state.regs.M && state.scanline < 240) {
+    if ((state.regs.M & (PPU::MASK_DRAW_BG | PPU::MASK_DRAW_SPRITE)) && (state.scanline < 240 || state.scanline == 261)) {
       if (_cartridge.getMapper()->nextScanline()) _cpu.triggerIRQ();
     }
   });
@@ -94,7 +94,7 @@ std::jthread Console::setupThread() {
 #if PENES_MICROPROFILE
     MicroProfileOnThreadCreate("NES processor");
 #endif
-    constexpr double AVG_ALPHA = 0.1;
+    constexpr double AVG_ALPHA = 0.2;
 
     auto lastFramePush = Clock::now(), lastCPUTick = Clock::now();
 
@@ -113,8 +113,7 @@ std::jthread Console::setupThread() {
         }
         if (cyclesDept < 0) return false;
         if (stop.stop_requested()) return false;
-        if (_ppu.isFrameReady()) return false;
-        return true;
+        return !_ppu.isFrameReady();
       };
 
       auto const currCPUTick = Clock::now();

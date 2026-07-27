@@ -13,61 +13,76 @@ class MMC3: public Mapper {
   MMC3(iNES* c): Mapper(c) { updateOffsets(); }
 
   uint8_t cpuOperation(bool isWrite, uint16_t addr, uint8_t value) final {
-    if (addr >= 0x6000 && addr <= 0x7FFF) return handleBattery(isWrite, addr & 0x1FFF, value);
+    if (addr >= 0x6000 && addr <= 0x7FFF) {
+      if (!m_prgRamEnable) return value;
+      if (isWrite && m_prgRamProtect) return value;
+      return handleBattery(isWrite, addr & 0x1FFF, value);
+    }
 
-    auto const bankNumber = (addr & 0x7FFF) / MMC3_PROG_BANK_SIZE;
-    auto const bankOffset = (addr & 0x7FFF) % MMC3_PROG_BANK_SIZE;
+    if (addr >= 0x8000) {
+      if (isWrite) {
+        bool const isEven = (addr % 2) == 0;
 
-    if (isWrite) {
-      bool const isEven = (addr % 2) == 0;
-
-      if (addr <= 0x9FFF) {
-        if (isEven) {
-          m_targetRegister = value & 0x07;
-          m_prgMode        = (value >> 6) & 0x01;
-          m_chrMode        = (value >> 7) & 0x01;
-        } else {
-          m_registers[m_targetRegister] = value;
-        }
-        updateOffsets();
-      } else if (addr >= 0xC000) {
-        if (addr <= 0xDFFF) {
+        if (addr <= 0x9FFF) {
+          if (isEven) {
+            m_targetRegister = value & 0x07;
+            m_prgMode        = (value >> 6) & 0x01;
+            m_chrMode        = (value >> 7) & 0x01;
+          } else {
+            m_registers[m_targetRegister] = value;
+          }
+          updateOffsets();
+        } else if (addr <= 0xBFFF) {
+          if (isEven) {
+            m_mirroring = (value & 0x01) ? PPU::MirroringMode::Horizontal : PPU::MirroringMode::Vertical;
+          } else {
+            m_prgRamEnable  = (value & 0x80) != 0;
+            m_prgRamProtect = (value & 0x40) != 0;
+          }
+        } else if (addr <= 0xDFFF) {
           if (isEven) {
             m_irqLatch = value;
           } else {
             m_irqReload = true;
           }
         } else {
-          m_irqEnable = !isEven;
+          if (isEven) {
+            m_irqEnable = false;
+          } else {
+            m_irqEnable = true;
+          }
         }
-      } else if (addr >= 0xA000 && addr <= 0xBFFF) {
-        if (isEven) /* Swap mirroring */ {
-          m_mirroring = value ? PPU::MirroringMode::Horizontal : PPU::MirroringMode::Vertical;
-        } else {
-          // ???
-        }
-      }
 
-      return value;
+        return value;
+      } else {
+        auto const bankNumber = (addr - 0x8000) / MMC3_PROG_BANK_SIZE;
+        auto const bankOffset = (addr - 0x8000) % MMC3_PROG_BANK_SIZE;
+
+        return m_cartridge->data[m_progBanks[bankNumber] + bankOffset];
+      }
     }
 
-    return m_cartridge->data[m_progBanks[bankNumber] + bankOffset];
+    return 0;
   }
 
   uint8_t ppuOperation(bool isWrite, uint16_t addr, uint8_t value) final {
-    if (m_cartridge->hdr.getCharNum() == 0) {
-      auto const chrRam = prepareCHRMemory(m_cartridge->hdr.getCharRamSize());
-      if (isWrite) return chrRam[addr & 0x1FFF] = value;
-      return chrRam[addr & 0x1FFF];
-    }
+    addr &= 0x1FFF;
 
     uint16_t const bankNumber = addr / 0x0400;
     uint16_t const bankOffset = addr % 0x0400;
 
+    if (m_cartridge->hdr.getCharNum() == 0) {
+      auto const     chrRam = prepareCHRMemory(m_cartridge->hdr.getCharRamSize());
+      uint32_t const offset = (m_chrBanks[bankNumber] + bankOffset) % chrRam.size();
+      if (isWrite) return chrRam[offset] = value;
+      return chrRam[offset];
+    }
+
+    if (isWrite) return value;
     return m_cartridge->data[m_charBaseOff + m_chrBanks[bankNumber] + bankOffset];
   }
 
-  std::pair<uint16_t, uint16_t> getMappedRegion() const final { return {m_cartridge->hdr.flags.battery ? 0x6000 : 0x8000, 0xFFFF}; }
+  std::pair<uint16_t, uint16_t> getMappedRegion() const final { return {0x6000, 0xFFFF}; }
 
   bool nextScanline() final {
     if (m_irqCounter == 0 || m_irqReload) {
@@ -93,6 +108,9 @@ class MMC3: public Mapper {
     dmp.push(m_chrMode);
     dmp.push(m_registers);
 
+    dmp.push(m_prgRamEnable);
+    dmp.push(m_prgRamProtect);
+
     dmp.push(m_progBanks);
     dmp.push(m_chrBanks);
 
@@ -112,6 +130,9 @@ class MMC3: public Mapper {
     m_chrMode        = rst.pop<decltype(m_chrMode)>();
     m_registers      = rst.pop<decltype(m_registers)>();
 
+    m_prgRamEnable  = rst.pop<decltype(m_prgRamEnable)>();
+    m_prgRamProtect = rst.pop<decltype(m_prgRamProtect)>();
+
     m_progBanks = rst.pop<decltype(m_progBanks)>();
     m_chrBanks  = rst.pop<decltype(m_chrBanks)>();
   }
@@ -127,6 +148,9 @@ class MMC3: public Mapper {
   uint8_t                m_chrMode        = 0;
   std::array<uint8_t, 8> m_registers      = {0, 0, 0, 0, 0, 0, 0, 0};
 
+  bool m_prgRamEnable  = true;
+  bool m_prgRamProtect = false;
+
   std::array<uint32_t, 4> m_progBanks = {0, 0, 0, 0};
   std::array<uint32_t, 8> m_chrBanks  = {0, 0, 0, 0, 0, 0, 0, 0};
 
@@ -138,8 +162,8 @@ class MMC3: public Mapper {
     uint32_t prgLast       = (prgBanksTotal > 0) ? (prgBanksTotal - 1) * MMC3_PROG_BANK_SIZE : 0;
     uint32_t prgSecondLast = (prgBanksTotal > 1) ? (prgBanksTotal - 2) * MMC3_PROG_BANK_SIZE : 0;
 
-    uint32_t r6 = (prgBanksTotal > 0) ? (m_registers[6] % prgBanksTotal) * MMC3_PROG_BANK_SIZE : 0;
-    uint32_t r7 = (prgBanksTotal > 0) ? (m_registers[7] % prgBanksTotal) * MMC3_PROG_BANK_SIZE : 0;
+    uint32_t r6 = (prgBanksTotal > 0) ? ((m_registers[6] & 0x3F) % prgBanksTotal) * MMC3_PROG_BANK_SIZE : 0;
+    uint32_t r7 = (prgBanksTotal > 0) ? ((m_registers[7] & 0x3F) % prgBanksTotal) * MMC3_PROG_BANK_SIZE : 0;
 
     if (m_prgMode == 0) {
       m_progBanks[0] = m_progBaseOff + r6;

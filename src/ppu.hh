@@ -92,10 +92,10 @@ class PPU: public MMU<uint16_t, 0, 0x1FFF, 5> {
     uint32_t shiftAt        = 0;
     int32_t  nextDecay      = 0;
 
-    uint8_t    vram[2048];
-    uint8_t    palette[32];
-    uint8_t    oam[256];
-    ScanSprite scanSprites[8];
+    std::array<uint8_t, 2048> vram;
+    std::array<uint8_t, 32>   palette;
+    std::array<uint8_t, 256>  oam;
+    std::array<ScanSprite, 8> scanSprites;
   };
 
   template <typename T>
@@ -155,7 +155,7 @@ class PPU: public MMU<uint16_t, 0, 0x1FFF, 5> {
   bool          m_frameReady = false;
   MirroringMode m_mirroring  = MirroringMode::Horizontal;
 
-  uint32_t m_frameBuffer[PPU_FRAMEBUFFER_PITCH * PPU_FRAMEBUFFER_HEIGHT];
+  std::array<uint32_t, PPU_FRAMEBUFFER_PITCH * PPU_FRAMEBUFFER_HEIGHT> m_frameBuffer = {};
 
   RegionTiming const* m_timing = &REGION_TIMINGS[0];
 };
