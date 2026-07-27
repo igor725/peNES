@@ -26,7 +26,9 @@ class Mapper {
   virtual std::vector<uint8_t>          dumpState() const                                        = 0;
   virtual void                          restoreState(std::vector<uint8_t>& state)                = 0;
 
-  virtual bool nextScanline() { return false; };
+  virtual void nextScanline() {}
+
+  virtual bool isIRQAsserted() const { return false; }
 
   PPU::MirroringMode getMirroringMode() const;
 

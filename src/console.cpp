@@ -54,7 +54,9 @@ Console::Console(): _ppu(_cpu), _apu(_cpu) {
 
   _ppu.setScanlineHook([&](PPU::PPUState const& state) {
     if ((state.regs.M & (PPU::MASK_DRAW_BG | PPU::MASK_DRAW_SPRITE)) && (state.scanline < 240 || state.scanline == 261)) {
-      if (_cartridge.getMapper()->nextScanline()) _cpu.triggerIRQ();
+      auto const& mapper = _cartridge.getMapper();
+      mapper->nextScanline();
+      _cpu.setInterrupt(CPU6502::INTRMASK_MAPPERIRQ, mapper->isIRQAsserted() ? CPU6502::INTRMASK_MAPPERIRQ : 0);
     }
   });
 }
@@ -71,8 +73,10 @@ void Console::put(std::string const& path, bool doValidation) {
   _cpu.addRangeHandler(_cartridge.getMapper()->getMappedRegion(), [&](bool isWrite, uint16_t addr, uint8_t value) -> uint8_t {
     // Let mapper handle this stuff
     auto const ret = _cartridge.getMapper()->cpuOperation(isWrite, addr, value);
-    if (isWrite) /* Temporary hack (probably), just in case if Mapper switched mirroring*/ {
-      _ppu.setMirroring(_cartridge.getMapper()->getMirroringMode());
+    if (isWrite) {
+      auto const& mapper = _cartridge.getMapper();
+      _ppu.setMirroring(mapper->getMirroringMode());
+      _cpu.setInterrupt(CPU6502::INTRMASK_MAPPERIRQ, mapper->isIRQAsserted() ? CPU6502::INTRMASK_MAPPERIRQ : 0);
     }
     return ret;
   });

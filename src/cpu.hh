@@ -182,14 +182,18 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 5> {
     uint8_t  X, Y; // Indices
   };
 
+  static constexpr uint8_t INTRMASK_NOIRQ     = 1 << 0;
+  static constexpr uint8_t INTRMASK_CPUHALT   = 1 << 1;
+  static constexpr uint8_t INTRMASK_NMI       = 1 << 2;
+  static constexpr uint8_t INTRMASK_APUIRQ    = 1 << 3;
+  static constexpr uint8_t INTRMASK_MAPPERIRQ = 1 << 4;
+  static constexpr uint8_t INTRMASK_IRQ       = (INTRMASK_APUIRQ | INTRMASK_MAPPERIRQ);
+
   struct CPUState {
     Registers regs;
 
-    bool     nmiTriggered : 1;
-    bool     irqTriggered : 1;
-    bool     intrClrSchd  : 1;
-    bool     halted       : 1;
-    uint16_t haltLine     : 12;
+    uint8_t  intrFlags : 5;
+    uint16_t haltLine  : 11;
 
     std::array<uint8_t, 0x800> ram;
   };
@@ -372,8 +376,7 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 5> {
 
   void    reset();
   uint8_t step();
-  void    triggerNMI();
-  void    triggerIRQ();
+  void    setInterrupt(uint8_t mask, uint8_t level);
 
   void setHook(CPUHook&& hook) { m_hook = std::move(hook); }
 
@@ -381,9 +384,9 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 5> {
 
   bool isBreakpointSet() const { return m_brkpt.type != CPUBreak::Type::Disabled; }
 
-  bool isHalted() const { return m_state.halted; }
+  bool isHalted() const { return (m_state.intrFlags & INTRMASK_CPUHALT) > 0; }
 
-  void haltResume() { m_state.halted = false; }
+  void haltResume() { m_state.intrFlags &= ~INTRMASK_CPUHALT; }
 
   template <typename T>
   T readMem(EvalAddress const& addr) const {

@@ -130,7 +130,7 @@ std::optional<uint8_t> PPU::cpuWrite(uint16_t addr, uint8_t value) {
     case 0x00: /* PPUCTRL */ {
       if (m_state.regs.S & STATUS_VBLANK) /* CTRL happend inside VBLANK */ {
         if ((m_state.regs.C & CTRL_GEN_NMI) == 0 && (value & CTRL_GEN_NMI) > 0) {
-          m_cpu.triggerNMI();
+          m_cpu.setInterrupt(CPU6502::INTRMASK_NMI, CPU6502::INTRMASK_NMI);
         }
       }
       m_state.regs.C   = value;
@@ -332,7 +332,7 @@ void PPU::pixelEval() {
   if (m_state.cycle == 1) {
     if (m_state.scanline == m_timing->vblankScanline) {
       m_state.regs.S |= STATUS_VBLANK;
-      if (m_state.regs.C & CTRL_GEN_NMI) m_cpu.triggerNMI();
+      if (m_state.regs.C & CTRL_GEN_NMI) m_cpu.setInterrupt(CPU6502::INTRMASK_NMI, CPU6502::INTRMASK_NMI);
       m_frameReady = true;
     } else if (m_state.scanline == m_timing->preRenderScanline) {
       m_state.regs.S = 0;

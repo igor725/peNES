@@ -47,7 +47,8 @@ class MMC3: public Mapper {
           }
         } else {
           if (isEven) {
-            m_irqEnable = false;
+            m_irqEnable  = false;
+            m_irqPending = false;
           } else {
             m_irqEnable = true;
           }
@@ -84,7 +85,7 @@ class MMC3: public Mapper {
 
   std::pair<uint16_t, uint16_t> getMappedRegion() const final { return {0x6000, 0xFFFF}; }
 
-  bool nextScanline() final {
+  void nextScanline() final {
     if (m_irqCounter == 0 || m_irqReload) {
       m_irqCounter = m_irqLatch;
       m_irqReload  = false;
@@ -92,8 +93,10 @@ class MMC3: public Mapper {
       m_irqCounter--;
     }
 
-    return m_irqCounter == 0 && m_irqEnable;
+    if (m_irqCounter == 0 && m_irqEnable) m_irqPending = true;
   }
+
+  bool isIRQAsserted() const { return m_irqPending; }
 
   std::vector<uint8_t> dumpState() const final {
     auto dmp = prepareMapperDumper();
@@ -102,6 +105,7 @@ class MMC3: public Mapper {
     dmp.push(m_irqCounter);
     dmp.push(m_irqEnable);
     dmp.push(m_irqReload);
+    dmp.push(m_irqPending);
 
     dmp.push(m_targetRegister);
     dmp.push(m_prgMode);
@@ -124,6 +128,7 @@ class MMC3: public Mapper {
     m_irqCounter = rst.pop<decltype(m_irqCounter)>();
     m_irqEnable  = rst.pop<decltype(m_irqEnable)>();
     m_irqReload  = rst.pop<decltype(m_irqReload)>();
+    m_irqPending = rst.pop<decltype(m_irqPending)>();
 
     m_targetRegister = rst.pop<decltype(m_targetRegister)>();
     m_prgMode        = rst.pop<decltype(m_prgMode)>();
@@ -142,6 +147,7 @@ class MMC3: public Mapper {
   uint8_t m_irqCounter = 0;
   bool    m_irqEnable  = false;
   bool    m_irqReload  = false;
+  bool    m_irqPending = false;
 
   uint8_t                m_targetRegister = 0;
   uint8_t                m_prgMode        = 0;

@@ -202,7 +202,6 @@ void APU::DeltaModChannel::step(CPU6502& cpu) {
         _currentLength  = _sampleLength;
       } else if (_irqEnable) {
         _irqTriggered = true;
-        cpu.triggerIRQ();
       }
     }
   }
@@ -364,7 +363,6 @@ void APU::step(uint8_t cycles) {
       const auto irq = [&]() {
         if (m_state.irqInhibit) return;
         m_state.frameIrq = true;
-        m_cpu.triggerIRQ();
       };
       const auto special = [&]() {
         if (m_state.extendedState) return;
@@ -397,4 +395,6 @@ void APU::step(uint8_t cycles) {
       }
     }
   }
+
+  m_cpu.setInterrupt(CPU6502::INTRMASK_APUIRQ, (m_state.frameIrq | m_state.dmc._irqTriggered) ? CPU6502::INTRMASK_APUIRQ : 0);
 }

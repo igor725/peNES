@@ -53,19 +53,16 @@ std::string CPU6502::InstructionStatus::buildMnemonic(bool withAddr) const {
 }
 
 void CPU6502::reset() {
-  m_state.nmiTriggered = false;
-  m_state.irqTriggered = false;
-  m_state.intrClrSchd  = false;
-  m_state.halted       = false;
-  m_state.regs.SP      = 0xFF;
-  m_state.regs.PC      = 0x00;
-  m_state.regs.SR.C    = 0;
-  m_state.regs.SR.Z    = 0;
-  m_state.regs.SR.D    = 0;
-  m_state.regs.SR.V    = 0;
-  m_state.regs.A       = 0;
-  m_state.regs.X       = 0;
-  m_state.regs.Y       = 0;
+  m_state.intrFlags = 0;
+  m_state.regs.SP   = 0xFF;
+  m_state.regs.PC   = 0x00;
+  m_state.regs.SR.C = 0;
+  m_state.regs.SR.Z = 0;
+  m_state.regs.SR.D = 0;
+  m_state.regs.SR.V = 0;
+  m_state.regs.A    = 0;
+  m_state.regs.X    = 0;
+  m_state.regs.Y    = 0;
   interrupt(0xFFFC);
 }
 
@@ -199,7 +196,7 @@ uint8_t CPU6502::handleControl(InstructionStatus& status) {
         case 0x05: /* NOP zp,X (illegal) */ status << Mnemonic::NOP << AddrMode::ZeroPageX; break;
         case 0x06: /* CLI impl */ {
           status << Mnemonic::CLI << AddrMode::Implied;
-          m_state.intrClrSchd = true;
+          m_state.intrFlags |= INTRMASK_NOIRQ;
           return postExecHook(status, 2);
         } break;
         case 0x07: /* NOP abs,X (illegal) */ status << Mnemonic::NOP << AddrMode::AbsoluteX; break;
@@ -1091,17 +1088,17 @@ uint8_t CPU6502::step() {
 #if PENES_MICROPROFILE
   MICROPROFILE_SCOPEI("NES", "CPU Step", MP_DARKGREY);
 #endif
-  if (m_state.halted) return 0;
+  if (m_state.intrFlags & INTRMASK_CPUHALT) return 0;
   if (m_brkpt.type == CPUBreak::Type::Exec && m_brkpt.address == m_state.regs.PC) m_brkpt.func();
-  if (m_state.nmiTriggered) {
-    m_state.nmiTriggered = false;
+  if (m_state.intrFlags & INTRMASK_NMI) {
+    m_state.intrFlags &= ~INTRMASK_NMI;
     return interrupt(0xFFFA, false);
   }
-  if (m_state.intrClrSchd) {
-    m_state.intrClrSchd = false;
-    m_state.regs.SR.I   = 0;
-  } else if (m_state.regs.SR.I == 0 && m_state.irqTriggered) {
-    m_state.irqTriggered = false;
+  if (m_state.intrFlags & INTRMASK_NOIRQ) {
+    m_state.intrFlags &= ~INTRMASK_NOIRQ;
+    m_state.regs.SR.I = 0;
+  } else if (m_state.regs.SR.I == 0 && m_state.intrFlags & INTRMASK_IRQ) {
+    m_state.intrFlags &= ~INTRMASK_IRQ;
     return interrupt(0xFFFE, false);
   }
 
@@ -1126,18 +1123,14 @@ uint8_t CPU6502::step() {
     if (m_hook) m_hook(s);
     return 0;
   } catch (HaltExecution const& ex) {
-    m_state.halted   = true;
+    m_state.intrFlags |= INTRMASK_CPUHALT;
     m_state.haltLine = ex.getLine();
     return 0;
   }
 }
 
-void CPU6502::triggerNMI() {
-  m_state.nmiTriggered = true;
-}
-
-void CPU6502::triggerIRQ() {
-  m_state.irqTriggered = true;
+void CPU6502::setInterrupt(uint8_t mask, uint8_t level) {
+  m_state.intrFlags = (m_state.intrFlags & ~mask) | level;
 }
 
 uint8_t CPU6502::writeMemByte(EvalAddress const& eval, uint8_t value) {
