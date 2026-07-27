@@ -51,7 +51,7 @@ class MMC1: public Mapper {
     return m_cartridge->data[m_charBaseOff + m_chrOff[(addr >> 12) & 0x1] + (addr & 0x0FFF)];
   }
 
-  std::pair<uint16_t, uint16_t> getMappedRegion() const final { return {m_cartridge->hdr.flags.battery ? 0x6000 : 0x8000, 0xFFFF}; }
+  std::pair<uint16_t, uint16_t> getMappedRegion() const final { return {0x6000, 0xFFFF}; }
 
   std::vector<uint8_t> dumpState() const final {
     auto dmp = prepareMapperDumper();

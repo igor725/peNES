@@ -10,6 +10,8 @@ class UNROM: public Mapper {
   UNROM(iNES* c): Mapper(c) { updateOffsets(); }
 
   uint8_t cpuOperation(bool isWrite, uint16_t addr, uint8_t value) final {
+    if (addr >= 0x6000 && addr <= 0x7FFF) return handleBattery(isWrite, addr & 0x1FFF, value);
+
     if (isWrite) {
       m_bankSelect = value;
       updateOffsets();
@@ -29,7 +31,7 @@ class UNROM: public Mapper {
     return m_cartridge->data[m_charBaseOff + (addr & 0x1FFF)];
   }
 
-  std::pair<uint16_t, uint16_t> getMappedRegion() const final { return {0x8000, 0xFFFF}; }
+  std::pair<uint16_t, uint16_t> getMappedRegion() const final { return {0x6000, 0xFFFF}; }
 
   std::vector<uint8_t> dumpState() const final {
     auto dmp = prepareMapperDumper();
