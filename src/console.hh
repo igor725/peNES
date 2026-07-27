@@ -17,7 +17,6 @@ struct Console {
   using Mutex      = std::shared_timed_mutex;
   using SharedLock = std::shared_lock<Mutex>;
   using UniqueLock = std::unique_lock<Mutex>;
-  using GuardLock  = std::lock_guard<Mutex>;
   using LockTmRes  = std::chrono::milliseconds;
 
   static constexpr auto TARGET_FRAMETIME = Delta(1.0 / 60.0988);

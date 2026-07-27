@@ -170,10 +170,14 @@ int32_t main(int32_t argc, char* argv[]) {
       auto const lock = nes.mkLock(std::chrono::milliseconds(4));
 
       if (lock.owns_lock()) {
-        nes._padBtns = currPadState;
-        if (!guiActive && nes._cpu.isHalted()) {
-          gui.triggerCPUHaltSequence();
-          guiActive = true;
+        if (!guiActive) {
+          nes._padBtns = currPadState;
+          if (nes._cpu.isHalted()) {
+            gui.triggerCPUHaltSequence();
+            guiActive = true;
+          }
+        } else {
+          nes._padBtns = {};
         }
       }
       if (auto frame = nes.step(lock); !frame.empty()) {

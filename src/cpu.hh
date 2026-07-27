@@ -174,15 +174,6 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 5> {
     AXS,
   };
 
-  struct [[gnu::packed]] InstructionDecode {
-    Mnemonic  mnemonic : 8 = Mnemonic::UNK;
-    AddrMode  addrMode : 4 = AddrMode::Invalid;
-    ExecStage stage    : 3 = ExecStage::PreParse;
-    uint8_t   cycles   : 4 = 0;
-    bool      isLegal  : 1 = false;
-    bool      skipExec : 1 = false;
-  };
-
   struct Registers {
     uint8_t  A;    // Accumulator
     Status   SR;   // Processor status
@@ -209,7 +200,14 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 5> {
     Instruction holder    = {};
     Operand     operand   = {};
 
-    InstructionDecode flags = {};
+    struct [[gnu::packed]] {
+      Mnemonic  mnemonic : 8 = Mnemonic::UNK;
+      AddrMode  addrMode : 4 = AddrMode::Invalid;
+      ExecStage stage    : 3 = ExecStage::PreParse;
+      uint8_t   cycles   : 4 = 0;
+      bool      isLegal  : 1 = false;
+      bool      skipExec : 1 = false;
+    } flags = {};
 
     InstructionStatus& operator<<(Mnemonic mn) {
       flags.mnemonic = mn, flags.isLegal = static_cast<uint32_t>(mn) < static_cast<uint32_t>(Mnemonic::UNK);
@@ -395,6 +393,18 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 5> {
       return static_cast<T>(readMemByte(addr));
     } else if constexpr (sizeof(T) == 2) {
       return static_cast<T>((readMemByte(addr.buildMoreOffset(1)) << 8) | readMemByte(addr));
+    }
+  }
+
+  template <typename T>
+  void writeMem(EvalAddress const& addr, T value) {
+    static_assert(std::is_integral_v<T> && sizeof(T) <= 2);
+
+    if constexpr (sizeof(T) == 1) {
+      writeMemByte(addr, value);
+    } else if constexpr (sizeof(T) == 2) {
+      writeMemByte(addr, value & 0xFF);
+      writeMemByte(addr.buildMoreOffset(1), value >> 8);
     }
   }
 

@@ -39,7 +39,10 @@ void GUI::triggerCPUHaltSequence() {
 bool GUI::produceFrame(Console& nes) {
   auto& io = ImGui::GetIO();
 
-  static float updateTimer = 1.f;
+  static float               updateTimer = 1.f;
+  static ImGuiHexEditorState hexEditor   = {
+      .UserData = &nes, /* safe to pass once, this reference never change */
+  };
 
   bool open = true;
 
@@ -48,28 +51,25 @@ bool GUI::produceFrame(Console& nes) {
   ImGui::NewFrame();
 
   ImGui::SetNextWindowSize(ImVec2(570, 400), ImGuiCond_Once);
-  if (ImGui::Begin("Debug your peNES", &open, ImGuiWindowFlags_NoCollapse)) {
+  if (ImGui::Begin("Debug your peNES", &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize)) {
     if (ImGui::BeginTabBar("DbgTabs")) {
-      if (ImGui::BeginTabItem("Stats")) {
-        static double sSpeed = 0;
-
-        if ((updateTimer += io.DeltaTime) > 1.f) {
-          auto const lock = nes.mkLock<Console::SharedLock>();
-
-          sSpeed      = nes._speed;
-          updateTimer = 0.f;
-        }
-        ImGui::Text("Emulation speed: %.2lf", sSpeed);
-        ImGui::EndTabItem();
-      }
       if (ImGui::BeginTabItem("CPU", nullptr, _cpuHalt ? ImGuiTabItemFlags_SetSelected : 0)) {
-        _cpuHalt = false;
+        static double sSpeed = 0;
 
         auto const lock = nes.mkLock<Console::UniqueLock>();
 
+        if ((updateTimer += io.DeltaTime) > 1.f) {
+          sSpeed      = nes._speed;
+          updateTimer = 0.f;
+        }
+
         auto const halted = nes._cpu.isHalted();
-        ImGui::Text("Current CPU state: %s", halted ? "Halted" : "Running");
+        ImGui::Text("Current CPU state: %s\nEmulation speed: %.2lf", halted ? "halted" : "running", sSpeed);
+        if (ImGui::Button("Reset")) {
+          nes._cpu.reset();
+        }
         if (halted) {
+          _cpuHalt = false;
           ImGui::SameLine();
           if (ImGui::Button("Resume (Dangerous)")) {
             nes._cpu.haltResume();
@@ -86,33 +86,78 @@ bool GUI::produceFrame(Console& nes) {
         ImGui::EndTabItem();
       }
       if (ImGui::BeginTabItem("RAM")) {
-        static ImGuiHexEditorState ramEditor = {
-            .MaxBytes     = sizeof(CPU6502::CPUState::ram),
-            .UserData     = &nes, /* safe to pass once, this reference never change */
-            .ReadCallback = [](ImGuiHexEditorState* state, int32_t offset, void* buf, int32_t size) -> int32_t {
-              if (size < 0 || offset < 0) return 0;
-              auto const nes = static_cast<Console*>(state->UserData);
+        if (hexEditor.Bytes != (void*)1) {
+          hexEditor.Bytes        = (void*)1;
+          hexEditor.MaxBytes     = sizeof(CPU6502::CPUState::ram);
+          hexEditor.ReadCallback = [](ImGuiHexEditorState* state, int32_t offset, void* buf, int32_t size) -> int32_t {
+            if (size < 0 || offset < 0) return 0;
+            auto const nes = static_cast<Console*>(state->UserData);
 
-              auto const lock = nes->mkLock<Console::SharedLock>();
+            auto const lock = nes->mkLock<Console::SharedLock>();
 
-              auto const& cpuState = nes->_cpu.exposeState();
-              std::memcpy(buf, cpuState.ram.data() + offset, size);
-              return cpuState.ram.size();
-            },
-            .WriteCallback = [](ImGuiHexEditorState* state, int32_t offset, void* buf, int32_t size) -> int32_t {
-              if (size < 0 || offset < 0) return 0;
-              auto const nes = static_cast<Console*>(state->UserData);
+            auto const& cpuState = nes->_cpu.exposeState();
+            std::memcpy(buf, cpuState.ram.data() + offset, size);
+            return cpuState.ram.size();
+          };
+          hexEditor.WriteCallback = [](ImGuiHexEditorState* state, int32_t offset, void* buf, int32_t size) -> int32_t {
+            if (size < 0 || offset < 0) return 0;
+            auto const nes = static_cast<Console*>(state->UserData);
 
-              auto const lock = nes->mkLock<Console::UniqueLock>();
+            auto const lock = nes->mkLock<Console::UniqueLock>();
 
-              auto& cpuState = nes->_cpu.exposeState();
-              std::memcpy(cpuState.ram.data() + offset, buf, size);
-              return size;
-            },
-        };
+            auto& cpuState = nes->_cpu.exposeState();
+            std::memcpy(cpuState.ram.data() + offset, buf, size);
+            return size;
+          };
+        }
 
-        ImGui::BeginHexEditor("##HexEditor", &ramEditor);
+        ImGui::BeginHexEditor("##RamEditor", &hexEditor);
         ImGui::EndHexEditor();
+        ImGui::EndTabItem();
+      }
+      if (ImGui::BeginTabItem("PRG RAM")) {
+        if (hexEditor.Bytes != (void*)2) {
+          auto const lock = nes.mkLock<Console::SharedLock>();
+
+          hexEditor.Bytes        = (void*)2;
+          hexEditor.MaxBytes     = nes._cartridge->hdr.getPrgRamSize();
+          hexEditor.ReadCallback = [](ImGuiHexEditorState* state, int32_t offset, void* buf, int32_t size) -> int32_t {
+            if (size < 0 || size > 255 || offset < 0) return 0;
+
+            auto const nes = static_cast<Console*>(state->UserData);
+
+            auto const lock = nes->mkLock<Console::SharedLock>();
+
+            CPU6502::EvalAddress addr((uint16_t)(0x6000 + offset));
+            for (uint16_t i = 0; i < size; ++i) {
+              addr.offset        = i;
+              ((uint8_t*)buf)[i] = nes->_cpu.readMem<uint8_t>(addr);
+            }
+
+            return size;
+          };
+          hexEditor.WriteCallback = [](ImGuiHexEditorState* state, int32_t offset, void* buf, int32_t size) -> int32_t {
+            if (size < 0 || size > 255 || offset < 0) return 0;
+            auto nes = static_cast<Console*>(state->UserData);
+
+            auto const lock = nes->mkLock<Console::UniqueLock>();
+
+            CPU6502::EvalAddress addr((uint16_t)(0x6000 + offset));
+            for (uint16_t i = 0; i < size; ++i) {
+              addr.offset = i;
+              nes->_cpu.writeMem(addr, ((uint8_t*)buf)[i]);
+            }
+
+            return size;
+          };
+        }
+
+        if (hexEditor.MaxBytes > 0) {
+          ImGui::BeginHexEditor("##ProgRamEditor", &hexEditor);
+          ImGui::EndHexEditor();
+        } else {
+          ImGui::Text("This ROM has no PRG-RAM block");
+        }
 
         ImGui::EndTabItem();
       }

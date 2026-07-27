@@ -34,18 +34,18 @@ std::string CPU6502::InstructionStatus::buildMnemonic(bool withAddr) const {
 
   switch (flags.addrMode) {
     case AddrMode::Accum: temp.push_back('A');
-    case AddrMode::Absolute: std::format_to(std::back_inserter(temp), "a${:X}", operand.u16); break;
-    case AddrMode::AbsoluteX: std::format_to(std::back_inserter(temp), "a${:X},X", operand.u16); break;
-    case AddrMode::AbsoluteY: std::format_to(std::back_inserter(temp), "a${:X},Y", operand.u16); break;
-    case AddrMode::Immediate: std::format_to(std::back_inserter(temp), "#${:X}", operand.u8); break;
+    case AddrMode::Absolute: std::format_to(std::back_inserter(temp), "a${:04X}", operand.u16); break;
+    case AddrMode::AbsoluteX: std::format_to(std::back_inserter(temp), "a${:04X},X", operand.u16); break;
+    case AddrMode::AbsoluteY: std::format_to(std::back_inserter(temp), "a${:04X},Y", operand.u16); break;
+    case AddrMode::Immediate: std::format_to(std::back_inserter(temp), "#${:02X}", operand.u8); break;
     case AddrMode::Implied: temp.append("impl"); break;
-    case AddrMode::Indirect: std::format_to(std::back_inserter(temp), "(${:X})", operand.u16); break;
-    case AddrMode::IndexedXIndir: std::format_to(std::back_inserter(temp), "(${:X},X)", operand.u8); break;
-    case AddrMode::IndirIndexedY: std::format_to(std::back_inserter(temp), "(${:X}),Y", operand.u8); break;
-    case AddrMode::Relative: std::format_to(std::back_inserter(temp), "r${:X}", operand.s8); break;
-    case AddrMode::ZeroPage: std::format_to(std::back_inserter(temp), "z${:X}", operand.u8); break;
-    case AddrMode::ZeroPageX: std::format_to(std::back_inserter(temp), "z${:X},X", operand.u8); break;
-    case AddrMode::ZeroPageY: std::format_to(std::back_inserter(temp), "z${:X},Y", operand.u8); break;
+    case AddrMode::Indirect: std::format_to(std::back_inserter(temp), "(${:04X})", operand.u16); break;
+    case AddrMode::IndexedXIndir: std::format_to(std::back_inserter(temp), "(${:02X},X)", operand.u8); break;
+    case AddrMode::IndirIndexedY: std::format_to(std::back_inserter(temp), "(${:02X}),Y", operand.u8); break;
+    case AddrMode::Relative: std::format_to(std::back_inserter(temp), "r${:02X}", operand.s8); break;
+    case AddrMode::ZeroPage: std::format_to(std::back_inserter(temp), "z${:02X}", operand.u8); break;
+    case AddrMode::ZeroPageX: std::format_to(std::back_inserter(temp), "z${:02X},X", operand.u8); break;
+    case AddrMode::ZeroPageY: std::format_to(std::back_inserter(temp), "z${:02X},Y", operand.u8); break;
     default: temp.append("???"); break;
   }
 
