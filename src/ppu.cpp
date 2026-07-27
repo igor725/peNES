@@ -26,9 +26,6 @@ uint16_t PPU::getNametableMirroringOffset(uint16_t addr) {
 
 uint8_t PPU::readInternal(uint16_t addr) {
   addr &= 0x3FFF;
-  if (auto const han = findHandler(addr)) {
-    if (auto const ret = (*han)(false, addr, 0); ret.has_value()) return ret.value();
-  }
 
   if (addr >= 0x2000 && addr <= 0x3EFF) {
     uint16_t nt_address = addr;
@@ -40,17 +37,17 @@ uint8_t PPU::readInternal(uint16_t addr) {
     if ((palette_address & 0x0003) == 0 && (palette_address & 0x0010)) palette_address &= 0x000F;
     auto const paletteMask = m_state.regs.M & MASK_GREYSCALE ? 0b00110000 : 0b00111111;
     return (m_state.palette[palette_address] & paletteMask) | (m_state.decay & 0xC0);
+  } else {
+    if (auto const han = findHandler(addr)) {
+      if (auto const ret = (*han)(false, addr, 0); ret.has_value()) return ret.value();
+    }
   }
 
-  return 0;
+  throw;
 }
 
 void PPU::writeInternal(uint16_t addr, uint8_t value) {
   addr &= 0x3FFF;
-  if (auto const han = findHandler(addr)) {
-    (*han)(true, addr, value);
-    return;
-  }
 
   if (addr >= 0x2000 && addr <= 0x3EFF) {
     uint16_t nt_address = addr;
@@ -68,6 +65,13 @@ void PPU::writeInternal(uint16_t addr, uint8_t value) {
     }
 
     m_state.palette[palette_address] = value;
+  } else {
+    if (auto const han = findHandler(addr)) {
+      (*han)(true, addr, value);
+      return;
+    }
+
+    throw;
   }
 }
 

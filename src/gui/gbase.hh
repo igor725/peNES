@@ -11,10 +11,12 @@ class GUI {
   void init(SDL_Window* wnd, SDL_Renderer* rend, SDL_AudioStream* strm);
   void forwardEvent(SDL_Event const*);
   bool produceFrame(Console& nes);
+  void triggerCPUHaltSequence();
   void updateTheme();
   void deinit();
 
   private:
-  SDL_Renderer*    _rend  = nullptr;
-  SDL_AudioStream* _astrm = nullptr;
+  SDL_Renderer*    _rend    = nullptr;
+  SDL_AudioStream* _astrm   = nullptr;
+  bool             _cpuHalt = false;
 };

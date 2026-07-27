@@ -169,7 +169,13 @@ int32_t main(int32_t argc, char* argv[]) {
        */
       auto const lock = nes.mkLock(std::chrono::milliseconds(4));
 
-      if (lock.owns_lock()) nes._padBtns = currPadState;
+      if (lock.owns_lock()) {
+        nes._padBtns = currPadState;
+        if (!guiActive && nes._cpu.isHalted()) {
+          gui.triggerCPUHaltSequence();
+          guiActive = true;
+        }
+      }
       if (auto frame = nes.step(lock); !frame.empty()) {
 #if PENES_MICROPROFILE
         MICROPROFILE_SCOPEI("Main", "Frame Pull", MP_BLACK);

@@ -103,8 +103,22 @@ std::jthread Console::setupThread() {
 #if PENES_MICROPROFILE
       MICROPROFILE_SCOPEI("NES", "Tick", MP_YELLOW);
 #endif
-      auto currCPUTick = Clock::now();
-      while (cyclesDept > 0 && !stop.stop_requested() && !_ppu.isFrameReady()) {
+
+      std::unique_lock lock(_sync);
+
+      auto const pred = [&] {
+        if (_cpu.isHalted()) {
+          _speed = 0.0;
+          return false;
+        }
+        if (cyclesDept < 0) return false;
+        if (stop.stop_requested()) return false;
+        if (_ppu.isFrameReady()) return false;
+        return true;
+      };
+
+      auto const currCPUTick = Clock::now();
+      while (pred()) {
         auto const cyclesMade = _cpu.step();
         if (cyclesMade >= 1) {
           _apu.step(cyclesMade);
@@ -134,19 +148,13 @@ std::jthread Console::setupThread() {
         }
 
         lastFramePush = currentTime;
-
-        std::unique_lock lock(_sync);
-
-        {
-#if PENES_MICROPROFILE
-          MICROPROFILE_SCOPEI("NES", "Pull Wait", MP_DEEPSKYBLUE);
-#endif
-          _wait.wait(lock, [&] { return !_ppu.isFrameReady() || stop.stop_requested(); });
-        }
+        _wait.wait(lock, [&] { return !_ppu.isFrameReady() || stop.stop_requested(); });
 
         _ticks += 1;
+        continue;
       } else {
         std::this_thread::yield();
+        _wait.wait(lock, [&] { return !_cpu.isHalted() || stop.stop_requested(); });
       }
     }
 #if PENES_MICROPROFILE

@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <string>
 
-class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 32> {
+class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 5> {
   union Status {
     struct {
       uint8_t C : 1;
@@ -20,14 +20,6 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 32> {
     };
 
     uint8_t _raw;
-  };
-
-  struct Registers {
-    uint8_t  A;    // Accumulator
-    Status   SR;   // Processor status
-    uint16_t PC;   // Program counter
-    uint8_t  SP;   // Stack pointer
-    uint8_t  X, Y; // Indices
   };
 
   enum class InstClass : uint8_t {
@@ -75,20 +67,6 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 32> {
     Type     type    = Type::Disabled;
     uint16_t address = 0;
     Func     func    = {};
-  };
-
-  struct CPUState {
-    Registers regs;
-
-    struct {
-      bool nmiTriggered : 1;
-      bool irqTriggered : 1;
-      bool intrClrSchd  : 1;
-    };
-
-    uint8_t padding[6];
-
-    std::array<uint8_t, 0x800> ram;
   };
 
   enum class ExecStage : uint8_t {
@@ -196,20 +174,42 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 32> {
     AXS,
   };
 
+  struct [[gnu::packed]] InstructionDecode {
+    Mnemonic  mnemonic : 8 = Mnemonic::UNK;
+    AddrMode  addrMode : 4 = AddrMode::Invalid;
+    ExecStage stage    : 3 = ExecStage::PreParse;
+    uint8_t   cycles   : 4 = 0;
+    bool      isLegal  : 1 = false;
+    bool      skipExec : 1 = false;
+  };
+
+  struct Registers {
+    uint8_t  A;    // Accumulator
+    Status   SR;   // Processor status
+    uint16_t PC;   // Program counter
+    uint8_t  SP;   // Stack pointer
+    uint8_t  X, Y; // Indices
+  };
+
+  struct CPUState {
+    Registers regs;
+
+    bool     nmiTriggered : 1;
+    bool     irqTriggered : 1;
+    bool     intrClrSchd  : 1;
+    bool     halted       : 1;
+    uint16_t haltLine     : 12;
+
+    std::array<uint8_t, 0x800> ram;
+  };
+
   struct [[gnu::packed]] InstructionStatus {
     CPU6502&    owner;
     uint16_t    startAddr = 0;
     Instruction holder    = {};
     Operand     operand   = {};
 
-    struct [[gnu::packed]] {
-      Mnemonic  mnemonic : 8 = Mnemonic::UNK;
-      AddrMode  addrMode : 4 = AddrMode::Invalid;
-      ExecStage stage    : 3 = ExecStage::PreParse;
-      uint8_t   cycles   : 4 = 0;
-      bool      isLegal  : 1 = false;
-      bool      skipExec : 1 = false;
-    } flags = {};
+    InstructionDecode flags = {};
 
     InstructionStatus& operator<<(Mnemonic mn) {
       flags.mnemonic = mn, flags.isLegal = static_cast<uint32_t>(mn) < static_cast<uint32_t>(Mnemonic::UNK);
@@ -380,6 +380,12 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 32> {
   void setHook(CPUHook&& hook) { m_hook = std::move(hook); }
 
   void setBreakpoint(CPUBreak&& brk) { m_brkpt = std::move(brk); }
+
+  bool isBreakpointSet() const { return m_brkpt.type != CPUBreak::Type::Disabled; }
+
+  bool isHalted() const { return m_state.halted; }
+
+  void haltResume() { m_state.halted = false; }
 
   template <typename T>
   T readMem(EvalAddress const& addr) const {

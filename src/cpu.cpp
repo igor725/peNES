@@ -14,6 +14,15 @@ class SkipInstruction {
   SkipInstruction() = default;
 };
 
+class HaltExecution {
+  uint16_t const m_line;
+
+  public:
+  constexpr HaltExecution(uint16_t l): m_line(l) {}
+
+  uint16_t getLine() const { return m_line; }
+};
+
 std::string CPU6502::InstructionStatus::buildMnemonic(bool withAddr) const {
   std::string temp;
   temp.reserve(withAddr ? 16 : 10);
@@ -47,6 +56,7 @@ void CPU6502::reset() {
   m_state.nmiTriggered = false;
   m_state.irqTriggered = false;
   m_state.intrClrSchd  = false;
+  m_state.halted       = false;
   m_state.regs.SP      = 0xFF;
   m_state.regs.PC      = 0x00;
   m_state.regs.SR.C    = 0;
@@ -578,7 +588,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
 
       uint8_t origValue = 0, resultValue = 0, cycles = 0;
       switch (status.getAddrMode()) {
-        case 0x00: /* JAM */ throw;
+        case 0x00: /* JAM */ throw HaltExecution(__LINE__);
         case 0x01: /* ASL zp */ status << AddrMode::ZeroPage; break;
         case 0x02: /* ASL A */ {
           status << AddrMode::Accum;
@@ -589,7 +599,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
           goto leave_early_ASL;
         } break;
         case 0x03: /* ASL abs */ status << AddrMode::Absolute; break;
-        case 0x04: /* JAM */ throw;
+        case 0x04: /* JAM */ throw HaltExecution(__LINE__);
         case 0x05: /* ASL zp,X */ status << AddrMode::ZeroPageX; break;
         case 0x06: /* NOP impl (illegal) */ status << Mnemonic::NOP << AddrMode::Implied; goto shift_NOPs;
         case 0x07: /* ASL abs,X */ cycles += 1, status << AddrMode::AbsoluteX; break;
@@ -614,7 +624,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
 
       status << Mnemonic::ROL;
       switch (status.getAddrMode()) {
-        case 0x00: /* JAM */ throw;
+        case 0x00: /* JAM */ throw HaltExecution(__LINE__);
         case 0x01: /* ROL zp */ status << AddrMode::ZeroPage; break;
         case 0x02: /* ROL A */ {
           status << AddrMode::Accum;
@@ -625,7 +635,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
           goto leave_early_ROL;
         } break;
         case 0x03: /* ROL abs */ status << AddrMode::Absolute; break;
-        case 0x04: /* JAM */ throw;
+        case 0x04: /* JAM */ throw HaltExecution(__LINE__);
         case 0x05: /* ROL zp,X */ status << AddrMode::ZeroPageX; break;
         case 0x06: /* NOP impl (illegal) */ status << Mnemonic::NOP << AddrMode::Implied; goto shift_NOPs;
 
@@ -651,7 +661,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
       status << Mnemonic::LSR;
 
       switch (status.getAddrMode()) {
-        case 0x00: /* JAM */ throw;
+        case 0x00: /* JAM */ throw HaltExecution(__LINE__);
         case 0x01: /* LSR zp */ status << AddrMode::ZeroPage; break;
         case 0x02: /* LSR A */ {
           status << AddrMode::Accum;
@@ -662,7 +672,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
           goto leave_early_LSR;
         } break;
         case 0x03: /* LSR abs */ status << AddrMode::Absolute; break;
-        case 0x04: /* JAM */ throw;
+        case 0x04: /* JAM */ throw HaltExecution(__LINE__);
         case 0x05: /* LSR zp,X */ status << AddrMode::ZeroPageX; break;
         case 0x06: /* NOP impl (illegal) */ status << Mnemonic::NOP << AddrMode::Implied; goto shift_NOPs;
 
@@ -687,7 +697,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
       uint8_t origValue = 0, resultValue = 0, cycles = 0;
 
       switch (status.getAddrMode()) {
-        case 0x00: /* JAM */ throw;
+        case 0x00: /* JAM */ throw HaltExecution(__LINE__);
         case 0x01: /* ROR zp */ status << Mnemonic::ROR << AddrMode::ZeroPage; break;
         case 0x02: /* ROR A */ {
           status << Mnemonic::ROR << AddrMode::Accum;
@@ -698,7 +708,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
           goto leave_early_ROR;
         } break;
         case 0x03: /* ROR abs */ status << Mnemonic::ROR << AddrMode::Absolute; break;
-        case 0x04: /* JAM */ throw;
+        case 0x04: /* JAM */ throw HaltExecution(__LINE__);
         case 0x05: /* ROR zp,X */ status << Mnemonic::ROR << AddrMode::ZeroPageX; break;
         case 0x06: /* NOP impl (illegal) */ status << Mnemonic::NOP << AddrMode::Implied; goto shift_NOPs;
 
@@ -743,7 +753,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
           writeMemByte(evaluateOperandToAddr(status), m_state.regs.X);
           return postExecHook(status, 4);
         } break;
-        case 0x04: /* JAM */ throw;
+        case 0x04: /* JAM */ throw HaltExecution(__LINE__);
         case 0x05: /* STX zp,Y */ {
           status << Mnemonic::STX << AddrMode::ZeroPageY;
           auto const eval = evaluateOperandToAddr(status);
@@ -779,7 +789,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
           goto leave_early_XSET;
         } break;
         case 0x03: /* LDX abs */ status << Mnemonic::LDX << AddrMode::Absolute; break;
-        case 0x04: /* JAM */ throw;
+        case 0x04: /* JAM */ throw HaltExecution(__LINE__);
         case 0x05: /* LDX zp,Y */ status << Mnemonic::LDX << AddrMode::ZeroPageY; break;
         case 0x06: /* TSX */ {
           status << Mnemonic::TSX << AddrMode::Implied;
@@ -820,7 +830,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
           goto leave_early_DEC;
         } break;
         case 0x03: /* DEC abs */ status << AddrMode::Absolute; break;
-        case 0x04: /* JAM */ throw;
+        case 0x04: /* JAM */ throw HaltExecution(__LINE__);
         case 0x05: /* DEC zp,X */ status << AddrMode::ZeroPageX; break;
         case 0x06: /* NOP impl (illegal) */ status << Mnemonic::NOP << AddrMode::Implied; goto shift_NOPs;
         case 0x07: /* DEC abs,X */ cycles += 1, status << AddrMode::AbsoluteX; break;
@@ -848,7 +858,7 @@ uint8_t CPU6502::handleShift(InstructionStatus& status) {
         case 0x01: /* INC zp */ status << AddrMode::ZeroPage; break;
         case 0x02: /* NOP impl (legal) */ status << Mnemonic::NOP << AddrMode::Implied; goto shift_NOPs;
         case 0x03: /* INC abs */ status << AddrMode::Absolute; break;
-        case 0x04: /* JAM */ throw;
+        case 0x04: /* JAM */ throw HaltExecution(__LINE__);
         case 0x05: /* INC zp,X */ status << AddrMode::ZeroPageX; break;
         case 0x06: /* NOP impl (illegal) */ status << Mnemonic::NOP << AddrMode::Implied; goto shift_NOPs;
         case 0x07: /* INC abs,X */ cycles += 1, status << AddrMode::AbsoluteX; break;
@@ -1081,6 +1091,7 @@ uint8_t CPU6502::step() {
 #if PENES_MICROPROFILE
   MICROPROFILE_SCOPEI("NES", "CPU Step", MP_DARKGREY);
 #endif
+  if (m_state.halted) return 0;
   if (m_brkpt.type == CPUBreak::Type::Exec && m_brkpt.address == m_state.regs.PC) m_brkpt.func();
   if (m_state.nmiTriggered) {
     m_state.nmiTriggered = false;
@@ -1114,6 +1125,10 @@ uint8_t CPU6502::step() {
     s.flags.stage = ExecStage::SkipExec;
     if (m_hook) m_hook(s);
     return 0;
+  } catch (HaltExecution const& ex) {
+    m_state.halted   = true;
+    m_state.haltLine = ex.getLine();
+    return 0;
   }
 }
 
@@ -1126,7 +1141,7 @@ void CPU6502::triggerIRQ() {
 }
 
 uint8_t CPU6502::writeMemByte(EvalAddress const& eval, uint8_t value) {
-  if (!eval.validAddr) throw;
+  if (!eval.validAddr) throw HaltExecution(__LINE__);
   auto const addr = eval.getAddress();
   if (m_brkpt.type == CPUBreak::Type::Write && m_brkpt.address == addr) m_brkpt.func();
   if (addr <= 0x1FFF) return m_state.ram[addr & 0x7ff] = value;
@@ -1139,7 +1154,7 @@ uint8_t CPU6502::writeMemByte(EvalAddress const& eval, uint8_t value) {
 }
 
 uint8_t CPU6502::readMemByte(EvalAddress const& eval) const {
-  if (!eval.validAddr) throw;
+  if (!eval.validAddr) throw HaltExecution(__LINE__);
   auto const addr = eval.getAddress();
   if (m_brkpt.type == CPUBreak::Type::Read && m_brkpt.address == addr) m_brkpt.func();
   if (addr <= 0x1FFF) return m_state.ram[addr & 0x7ff];
@@ -1152,7 +1167,7 @@ uint8_t CPU6502::readMemByte(EvalAddress const& eval) const {
 }
 
 void CPU6502::preExecHook(InstructionStatus& status) {
-  if (status.flags.addrMode == AddrMode::Invalid) throw;
+  if (status.flags.addrMode == AddrMode::Invalid) throw HaltExecution(__LINE__);
   status.flags.stage = ExecStage::PreExec;
   if (m_hook) m_hook(status);
   if (status.flags.skipExec) throw SkipInstruction();

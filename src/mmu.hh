@@ -9,8 +9,10 @@
 #include <stdexcept>
 #include <utility>
 
-template <typename _AddrType, _AddrType _MemOffset, _AddrType _MemEnd = std::numeric_limits<_AddrType>::max(), size_t _BucketSize = 32, size_t _MaxHandlers = 4>
+template <typename _AddrType, _AddrType _MemOffset, _AddrType _MemEnd = std::numeric_limits<_AddrType>::max(), size_t _NumBits = 5, size_t _MaxHandlers = 4>
 class MMU {
+  static constexpr size_t _BucketSize = 1 << _NumBits;
+
   static_assert(_MemEnd > _MemOffset && (_MemEnd - _MemOffset >= _BucketSize));
   static_assert((_BucketSize > 0) && ((_BucketSize & (_BucketSize - 1)) == 0));
   static constexpr size_t _NumBuckets = ((_MemEnd - _MemOffset) / 2) + 1;
@@ -47,7 +49,7 @@ class MMU {
 
   Handler const* findHandler(_AddrType address) const {
     if (address < _MemOffset) return nullptr;
-    auto const handlerIdx = m_buckets[(address - _MemOffset) >> 5];
+    auto const handlerIdx = m_buckets[(address - _MemOffset) >> _NumBits];
     if (handlerIdx == -1) return nullptr;
     return &m_handlers[handlerIdx];
   }
