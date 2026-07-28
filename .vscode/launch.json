@@ -1,35 +1,53 @@
 {
-	"version": "0.2.0",
-	"configurations": [
-		{
-			"name": "(gdb) Launch",
-			"type": "cppdbg",
-			"request": "launch",
-			"program": "${workspaceFolder}/build/peNES",
-			"args": [
-				// "./simple.nes",
-				// "./2048.nes",
-				// "./smb.nes",
-				"./AccuracyCoin.nes",
-			],
-			"stopAtEntry": false,
-			"cwd": "${workspaceFolder}/build",
-			"environment": [],
-			"externalConsole": false,
-			"preLaunchTask": "CMake: build",
-			"MIMode": "gdb",
-			"setupCommands": [
-				{
-					"description": "Enable pretty-printing for gdb",
-					"text": "-enable-pretty-printing",
-					"ignoreFailures": true
-				},
-				{
-					"description": "Set Disassembly Flavor to Intel",
-					"text": "-gdb-set disassembly-flavor intel",
-					"ignoreFailures": true
-				}
-			]
-		}
-	]
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "(gdb) Launch",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${command:cmake.launchTargetPath}",
+      "args": [
+        "--volume",
+        "0.2",
+        "--skipvalid",
+        "true",
+        // "./simple.nes",
+        // "./2048.nes",
+        // "./smb.nes",
+        "./AccuracyCoin.nes",
+        // "./zelda.nes",
+        // "./SnowBros.nes",
+        // "./Chip_and_Dale.nes",
+        // "./SnowBrosAlive.nes",
+        // "./nestest.nes",
+        // "./scroll.nes",
+        // "./ppu/palette_ram.nes",
+        // "./ppu/power_up_palette.nes",
+        // "./ppu/sprite_ram.nes",
+        // "./ppu/vbl_clear_time.nes",
+        // "./ppu/vram_access.nes",
+        // "./ppu/demo_ntsc.nes",
+        // "./ppu/scanline.nes",
+        // "./ppu/ppu_vbl_nmi.nes",
+        // "./mapperTests/M1_P512K_S32K.nes",
+      ],
+      "stopAtEntry": false,
+      "cwd": "${command:cmake.launchTargetDirectory}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Set Disassembly Flavor to Intel",
+          "text": "-gdb-set disassembly-flavor intel",
+          "ignoreFailures": true
+        }
+      ]
+    }
+  ]
 }
