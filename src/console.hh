@@ -17,6 +17,7 @@ struct Console {
   using Mutex      = std::shared_timed_mutex;
   using SharedLock = std::shared_lock<Mutex>;
   using UniqueLock = std::unique_lock<Mutex>;
+  using GuardLock  = std::lock_guard<Mutex>;
   using LockTmRes  = std::chrono::milliseconds;
 
   static constexpr auto TARGET_FRAMETIME = Delta(1.0 / 60.0988);
@@ -88,8 +89,10 @@ struct Console {
 
   template <typename LockType = std::unique_lock<Mutex>>
   auto mkLock(LockTmRes wait = LockTmRes::max()) {
-    if (wait == LockTmRes(0)) return LockType(_sync, std::try_to_lock);
-    if (wait != LockTmRes::max()) return LockType(_sync, wait);
+    if constexpr (!std::is_same_v<GuardLock, LockType>) {
+      if (wait == LockTmRes(0)) return LockType(_sync, std::try_to_lock);
+      if (wait != LockTmRes::max()) return LockType(_sync, wait);
+    }
     return LockType(_sync);
   }
 

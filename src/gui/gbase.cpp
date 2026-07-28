@@ -56,7 +56,7 @@ bool GUI::produceFrame(Console& nes) {
       if (ImGui::BeginTabItem("CPU", nullptr, _cpuHalt ? ImGuiTabItemFlags_SetSelected : 0)) {
         static double sSpeed = 0;
 
-        auto const lock = nes.mkLock<Console::UniqueLock>();
+        auto const lock = nes.mkLock<Console::GuardLock>();
 
         if ((updateTimer += io.DeltaTime) > 1.f) {
           sSpeed      = nes._speed;
@@ -103,7 +103,7 @@ bool GUI::produceFrame(Console& nes) {
             if (size < 0 || offset < 0) return 0;
             auto const nes = static_cast<Console*>(state->UserData);
 
-            auto const lock = nes->mkLock<Console::UniqueLock>();
+            auto const lock = nes->mkLock<Console::GuardLock>();
 
             auto& cpuState = nes->_cpu.exposeState();
             std::memcpy(cpuState.ram.data() + offset, buf, size);
@@ -140,7 +140,7 @@ bool GUI::produceFrame(Console& nes) {
             if (size < 0 || size > 255 || offset < 0) return 0;
             auto nes = static_cast<Console*>(state->UserData);
 
-            auto const lock = nes->mkLock<Console::UniqueLock>();
+            auto const lock = nes->mkLock<Console::GuardLock>();
 
             CPU6502::EvalAddress addr((uint16_t)(0x6000 + offset));
             for (uint16_t i = 0; i < size; ++i) {
