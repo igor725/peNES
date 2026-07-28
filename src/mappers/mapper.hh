@@ -14,6 +14,7 @@ class Mapper {
   public:
   static constexpr size_t TRAINER_BLOCK_SIZE = 0x200;
   static constexpr size_t PROG_BANK_SIZE     = 0x4000;
+  static constexpr size_t PROG_BANKS_NUM     = 0x2;
   static constexpr size_t CHAR_BANK_SIZE     = 0x2000;
 
   Mapper(iNES* c, bool subMappersAware = false);

@@ -18,7 +18,7 @@ class HaltExecution {
   uint16_t const m_line;
 
   public:
-  constexpr HaltExecution(uint16_t l): m_line(l) {}
+  HaltExecution(uint16_t l /* ALWAYS make sure the line number takes less space than N bits specified in CPUState::haltLine */): m_line(l) {}
 
   uint16_t getLine() const { return m_line; }
 };

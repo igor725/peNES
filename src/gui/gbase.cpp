@@ -8,6 +8,7 @@
 #include <imgui_hex.h>
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_sdlrenderer3.h>
+#include <imgui_internal.h>
 
 void GUI::init(SDL_Window* wnd, SDL_Renderer* rend, SDL_AudioStream* strm) {
   IMGUI_CHECKVERSION();
@@ -41,7 +42,65 @@ bool GUI::produceFrame(Console& nes) {
 
   static float               updateTimer = 1.f;
   static ImGuiHexEditorState hexEditor   = {
-      .UserData = &nes, /* safe to pass once, this reference never change */
+      .Bytes        = (void*)-1,
+      .BytesPerLine = 16,
+      .AddressChars = 5,
+      .UserData     = &nes, /* safe to pass once, this reference never change */
+      .ReadCallback = [](ImGuiHexEditorState* state, int32_t offset, void* buf, int32_t size) -> int32_t {
+        if (size < 0 || size > 255 || offset < 0) return 0;
+
+        auto const nes = static_cast<Console*>(state->UserData);
+
+        auto const lock = nes->mkLock<Console::SharedLock>();
+
+        CPU6502::EvalAddress addr((uint16_t)((size_t)state->Bytes + offset));
+        for (uint16_t i = 0; i < size; ++i) {
+          addr.offset        = i;
+          ((uint8_t*)buf)[i] = nes->_cpu.readMem<uint8_t>(addr);
+        }
+
+        return size;
+      },
+      .WriteCallback = [](ImGuiHexEditorState* state, int32_t offset, void* buf, int32_t size) -> int32_t {
+        if (size < 0 || size > 255 || offset < 0) return 0;
+        auto nes = static_cast<Console*>(state->UserData);
+
+        auto const lock = nes->mkLock<Console::GuardLock>();
+
+        CPU6502::EvalAddress addr((uint16_t)((size_t)state->Bytes + offset));
+        for (uint16_t i = 0; i < size; ++i) {
+          addr.offset = i;
+          nes->_cpu.writeMem(addr, ((uint8_t*)buf)[i]);
+        }
+
+        return size;
+      },
+      .GetAddressNameCallback = [](ImGuiHexEditorState* state, int32_t offset, char* buf, int32_t bufSize) -> bool {
+        ImFormatString(buf, (size_t)bufSize, "$%04zX", (size_t)state->Bytes /* Holds base offset of the region */ + (size_t)offset);
+        return true;
+      },
+
+  };
+
+  auto const drawHexEditor = [](const char* addText = nullptr) {
+    char buf[128] = {'\0'};
+
+    if (addText) std::strncpy(buf, addText, sizeof(buf) - 1);
+    if (hexEditor.SelectStartByte == hexEditor.SelectEndByte) {
+      std::strncat(buf, "Hardware address: $%04zX", sizeof(buf) - 1);
+    } else {
+      std::strncat(buf, "Hardware address: $%04zX-$%04zX", sizeof(buf) - 1);
+    }
+
+    auto const reserveSize = ImGui::CalcTextSize(buf).y + ImGui::GetStyle().ItemSpacing.y;
+
+    if (ImGui::BeginChild("##HexEditorChild", ImVec2(0, -reserveSize))) {
+      ImGui::BeginHexEditor("##HexEditor", &hexEditor);
+      ImGui::EndHexEditor();
+    }
+    ImGui::EndChild();
+
+    ImGui::Text(buf, (size_t)hexEditor.Bytes + hexEditor.SelectStartByte, (size_t)hexEditor.Bytes + hexEditor.SelectEndByte);
   };
 
   bool open = true;
@@ -86,79 +145,45 @@ bool GUI::produceFrame(Console& nes) {
         ImGui::EndTabItem();
       }
       if (ImGui::BeginTabItem("RAM")) {
-        if (hexEditor.Bytes != (void*)1) {
-          hexEditor.Bytes        = (void*)1;
-          hexEditor.MaxBytes     = sizeof(CPU6502::CPUState::ram);
-          hexEditor.ReadCallback = [](ImGuiHexEditorState* state, int32_t offset, void* buf, int32_t size) -> int32_t {
-            if (size < 0 || offset < 0) return 0;
-            auto const nes = static_cast<Console*>(state->UserData);
-
-            auto const lock = nes->mkLock<Console::SharedLock>();
-
-            auto const& cpuState = nes->_cpu.exposeState();
-            std::memcpy(buf, cpuState.ram.data() + offset, size);
-            return cpuState.ram.size();
-          };
-          hexEditor.WriteCallback = [](ImGuiHexEditorState* state, int32_t offset, void* buf, int32_t size) -> int32_t {
-            if (size < 0 || offset < 0) return 0;
-            auto const nes = static_cast<Console*>(state->UserData);
-
-            auto const lock = nes->mkLock<Console::GuardLock>();
-
-            auto& cpuState = nes->_cpu.exposeState();
-            std::memcpy(cpuState.ram.data() + offset, buf, size);
-            return size;
-          };
+        if (hexEditor.Bytes != (void*)0) {
+          hexEditor.SelectStartByte = 0;
+          hexEditor.SelectEndByte   = 0;
+          hexEditor.Bytes           = (void*)0;
+          hexEditor.MaxBytes        = sizeof(CPU6502::CPUState::ram);
         }
 
-        ImGui::BeginHexEditor("##RamEditor", &hexEditor);
-        ImGui::EndHexEditor();
+        drawHexEditor();
         ImGui::EndTabItem();
       }
       if (ImGui::BeginTabItem("PRG RAM")) {
-        if (hexEditor.Bytes != (void*)2) {
+        if (hexEditor.Bytes != (void*)0x6000) {
           auto const lock = nes.mkLock<Console::SharedLock>();
 
-          hexEditor.Bytes        = (void*)2;
-          hexEditor.MaxBytes     = nes._cartridge->hdr.getPrgRamSize();
-          hexEditor.ReadCallback = [](ImGuiHexEditorState* state, int32_t offset, void* buf, int32_t size) -> int32_t {
-            if (size < 0 || size > 255 || offset < 0) return 0;
-
-            auto const nes = static_cast<Console*>(state->UserData);
-
-            auto const lock = nes->mkLock<Console::SharedLock>();
-
-            CPU6502::EvalAddress addr((uint16_t)(0x6000 + offset));
-            for (uint16_t i = 0; i < size; ++i) {
-              addr.offset        = i;
-              ((uint8_t*)buf)[i] = nes->_cpu.readMem<uint8_t>(addr);
-            }
-
-            return size;
-          };
-          hexEditor.WriteCallback = [](ImGuiHexEditorState* state, int32_t offset, void* buf, int32_t size) -> int32_t {
-            if (size < 0 || size > 255 || offset < 0) return 0;
-            auto nes = static_cast<Console*>(state->UserData);
-
-            auto const lock = nes->mkLock<Console::GuardLock>();
-
-            CPU6502::EvalAddress addr((uint16_t)(0x6000 + offset));
-            for (uint16_t i = 0; i < size; ++i) {
-              addr.offset = i;
-              nes->_cpu.writeMem(addr, ((uint8_t*)buf)[i]);
-            }
-
-            return size;
-          };
+          hexEditor.SelectStartByte = 0;
+          hexEditor.SelectEndByte   = 0;
+          hexEditor.Bytes           = (void*)0x6000;
+          hexEditor.MaxBytes        = nes._cartridge->hdr.getPrgRamSize();
         }
 
         if (hexEditor.MaxBytes > 0) {
-          ImGui::BeginHexEditor("##ProgRamEditor", &hexEditor);
-          ImGui::EndHexEditor();
+          drawHexEditor();
         } else {
           ImGui::Text("This ROM has no PRG-RAM block");
         }
 
+        ImGui::EndTabItem();
+      }
+      if (ImGui::BeginTabItem("PRG ROM")) {
+        if (hexEditor.Bytes != (void*)0x8000) {
+          auto const lock = nes.mkLock<Console::SharedLock>();
+
+          hexEditor.SelectStartByte = 0;
+          hexEditor.SelectEndByte   = 0;
+          hexEditor.Bytes           = (void*)0x8000;
+          hexEditor.MaxBytes        = Mapper::PROG_BANK_SIZE * Mapper::PROG_BANKS_NUM;
+        }
+
+        drawHexEditor("Note: writing to this space is dangerous, behavior depends on the mapper.\n");
         ImGui::EndTabItem();
       }
       if (ImGui::BeginTabItem("APU")) {
