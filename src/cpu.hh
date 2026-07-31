@@ -7,21 +7,6 @@
 #include <string>
 
 class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 5> {
-  union Status {
-    struct {
-      uint8_t C : 1;
-      uint8_t Z : 1;
-      uint8_t I : 1;
-      uint8_t D : 1;
-      uint8_t B : 1;
-      uint8_t U : 1;
-      uint8_t V : 1;
-      uint8_t N : 1;
-    };
-
-    uint8_t _raw;
-  };
-
   enum class InstClass : uint8_t {
     Control,
     Math,
@@ -172,6 +157,21 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 5> {
     ANE,
     LXA,
     AXS,
+  };
+
+  union Status {
+    struct {
+      uint8_t C : 1;
+      uint8_t Z : 1;
+      uint8_t I : 1;
+      uint8_t D : 1;
+      uint8_t B : 1;
+      uint8_t U : 1;
+      uint8_t V : 1;
+      uint8_t N : 1;
+    };
+
+    uint8_t _raw;
   };
 
   struct Registers {

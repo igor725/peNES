@@ -64,6 +64,7 @@ class SavesSystem {
     auto const lock = nes.mkLock<Console::UniqueLock>();
 
     auto const& state = m_saves.at(slot);
+    if (!state.has_value()) return;
     nes._cpu.restoreState(state->cpuState);
     nes._ppu.restoreState(state->ppuState);
     nes._apu.restoreState(state->apuState);
