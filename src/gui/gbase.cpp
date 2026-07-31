@@ -4,11 +4,80 @@
 
 #include <SDL3/SDL_render.h>
 #include <SDL3/SDL_video.h>
+#include <algorithm>
+#include <array>
+#include <chrono>
+#include <format>
 #include <imgui.h>
 #include <imgui_hex.h>
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_sdlrenderer3.h>
 #include <imgui_internal.h>
+#include <optional>
+
+class SavesSystem {
+  struct FullState {
+    std::string          dateName;
+    CPU6502::CPUState    cpuState;
+    PPU::PPUState        ppuState;
+    APU::APUState        apuState;
+    std::vector<uint8_t> mapperState;
+  };
+
+  SavesSystem() {}
+
+  public:
+  static constexpr int8_t MAX_SLOTS = 10;
+
+  bool hasSave(int8_t slot) const { return slot < MAX_SLOTS && m_saves[slot].has_value(); }
+
+  std::string_view getName(int8_t slot) {
+    if (slot < 0 || slot >= MAX_SLOTS) return {};
+    return m_saves[slot]->dateName;
+  }
+
+  void save(Console& nes, int8_t slot) {
+    if (slot >= MAX_SLOTS) return;
+
+    auto const lock = nes.mkLock<Console::SharedLock>();
+
+    FullState state {
+        .dateName = std::format(
+            "{:%F %T}", std::chrono::zoned_time {std::chrono::current_zone(), std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now())}),
+        .cpuState    = nes._cpu.dumpState(),
+        .ppuState    = nes._ppu.dumpState(),
+        .apuState    = nes._apu.dumpState(),
+        .mapperState = nes._cartridge.getMapper()->dumpState(),
+    };
+
+    if (slot == -1) {
+      std::move_backward(m_saves.begin(), m_saves.end() - 1, m_saves.end());
+      m_saves[0] = std::move(state);
+    } else if (slot >= 0) {
+      m_saves[slot] = std::move(state);
+    }
+  }
+
+  void restore(Console& nes, int8_t slot) {
+    if (slot < 0 || slot >= MAX_SLOTS) return;
+
+    auto const lock = nes.mkLock<Console::UniqueLock>();
+
+    auto const& state = m_saves.at(slot);
+    nes._cpu.restoreState(state->cpuState);
+    nes._ppu.restoreState(state->ppuState);
+    nes._apu.restoreState(state->apuState);
+    nes._cartridge.getMapper()->restoreState(state->mapperState);
+  }
+
+  static SavesSystem& get() {
+    static SavesSystem inst;
+    return inst;
+  }
+
+  private:
+  std::array<std::optional<FullState>, MAX_SLOTS> m_saves;
+};
 
 void GUI::init(SDL_Window* wnd, SDL_Renderer* rend, SDL_AudioStream* strm) {
   IMGUI_CHECKVERSION();
@@ -19,6 +88,19 @@ void GUI::init(SDL_Window* wnd, SDL_Renderer* rend, SDL_AudioStream* strm) {
   ImGui_ImplSDLRenderer3_Init(rend);
   _rend = rend, _astrm = strm;
   updateTheme();
+}
+
+void GUI::savestateAction(Console& nes, SaveAction sa, int8_t slot) {
+  auto& ss = SavesSystem::get();
+
+  switch (sa) {
+    case SaveAction::Save: {
+      ss.save(nes, slot);
+    } break;
+    case SaveAction::Load: {
+      ss.restore(nes, slot);
+    } break;
+  }
 }
 
 void GUI::updateTheme() {
@@ -112,6 +194,30 @@ bool GUI::produceFrame(Console& nes) {
   ImGui::SetNextWindowSize(ImVec2(570, 400), ImGuiCond_Once);
   if (ImGui::Begin("Debug your peNES", &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize)) {
     if (ImGui::BeginTabBar("DbgTabs")) {
+      if (ImGui::BeginTabItem("Savestate")) {
+        auto& ss = SavesSystem::get();
+        for (int8_t i = 0; i < SavesSystem::MAX_SLOTS; ++i) {
+          ImGui::PushID(i);
+          ImGui::Text("Slot #%d", i);
+          ImGui::SameLine();
+          if (ImGui::Button("Save")) {
+            ss.save(nes, i);
+          }
+          ImGui::SameLine();
+          auto const hasSave = ss.hasSave(i);
+          ImGui::BeginDisabled(!hasSave);
+          if (ImGui::Button("Load")) {
+            ss.restore(nes, i);
+          }
+          ImGui::EndDisabled();
+          if (hasSave) {
+            ImGui::SameLine();
+            ImGui::Text("%s", ss.getName(i).data());
+          }
+          ImGui::PopID();
+        }
+        ImGui::EndTabItem();
+      }
       if (ImGui::BeginTabItem("CPU", nullptr, _cpuHalt ? ImGuiTabItemFlags_SetSelected : 0)) {
         static double sSpeed = 0;
 

@@ -151,7 +151,7 @@ class APU {
 
   APUState dumpState() const { return m_state; }
 
-  void restoreState(APUState& state) { m_state = state; }
+  void restoreState(APUState const& state) { m_state = state; }
 
   protected:
   float mixChannels() const;

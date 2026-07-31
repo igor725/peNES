@@ -33,7 +33,7 @@ std::string CPU6502::InstructionStatus::buildMnemonic(bool withAddr) const {
   temp.push_back(' ');
 
   switch (flags.addrMode) {
-    case AddrMode::Accum: temp.push_back('A');
+    case AddrMode::Accum: temp.push_back('A'); break;
     case AddrMode::Absolute: std::format_to(std::back_inserter(temp), "a${:04X}", operand.u16); break;
     case AddrMode::AbsoluteX: std::format_to(std::back_inserter(temp), "a${:04X},X", operand.u16); break;
     case AddrMode::AbsoluteY: std::format_to(std::back_inserter(temp), "a${:04X},Y", operand.u16); break;

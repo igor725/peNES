@@ -422,7 +422,7 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 5> {
 
   CPUState& exposeState() { return m_state; }
 
-  void restoreState(CPUState& state) { m_state = std::move(state); }
+  void restoreState(CPUState const& state) { m_state = state; }
 
   protected:
   inline EvalAddress evaluateOperandToAddr(InstructionStatus const& status) {

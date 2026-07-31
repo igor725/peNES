@@ -14,7 +14,7 @@ class MapperDumper {
   public:
   MapperDumper()          = default;
   virtual ~MapperDumper() = default;
-  MapperDumper(std::vector<uint8_t>& state): m_dump(state) {};
+  MapperDumper(std::vector<uint8_t> const& state): m_dump(state) {};
 
   std::vector<uint8_t> extract() { return std::move(m_dump); }
 

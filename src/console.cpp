@@ -166,26 +166,6 @@ std::jthread Console::setupThread() {
   });
 }
 
-void Console::saveState() {
-  std::shared_lock const lock(_sync);
-  _fullState = FullState {
-      .cpuState    = _cpu.dumpState(),
-      .ppuState    = _ppu.dumpState(),
-      .apuState    = _apu.dumpState(),
-      .mapperState = _cartridge.getMapper()->dumpState(),
-  };
-}
-
-void Console::restoreState() {
-  std::lock_guard const lock(_sync);
-  if (_fullState.has_value()) {
-    _cpu.restoreState(_fullState->cpuState);
-    _ppu.restoreState(_fullState->ppuState);
-    _apu.restoreState(_fullState->apuState);
-    _cartridge.getMapper()->restoreState(_fullState->mapperState);
-  }
-}
-
 void Console::stop() {
   std::lock_guard const lock(_sync);
   _thread.request_stop();

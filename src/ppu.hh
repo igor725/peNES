@@ -134,7 +134,7 @@ class PPU: public MMU<uint16_t, 0, 0x1FFF, 5> {
 
   PPUState dumpState() const { return m_state; }
 
-  void restoreState(PPUState& state) { m_state = state; }
+  void restoreState(PPUState const& state) { m_state = state; }
 
   protected:
   void     findSpritesOnScanline();

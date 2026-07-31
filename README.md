@@ -52,10 +52,10 @@ curl -L http://127.0.0.1:8486/path/to/a/totally/legal/storage/of/manually/dumped
 * `--volume [0...1]` - Set the master volume for the emulator, defaults to `0.3`
 * `--skipvalid` - Skip NES dump validation and try to run it anyways, the game might run into even more issues than usual if it's fails the validation
 
-Currently the emulator supports only Unix-like systems, it was tested on Arch Linux only so far.
+Currently the emulator supports Unix-like and Windows systems, it was tested on Arch Linux, Wine and Windows 11 so far.
 
 ### Controls
-On gamepad you can use DPAD to navigate, A/B buttons to make actions, Y to cause CPU to reset, Select/Start to pick options. LB/RB to save/restore current enulation state.
+On gamepad you can use DPAD to navigate, A/B buttons to make actions, Y to cause CPU to reset, Select/Start to pick options. LB/RB to save/restore current emulation state.
 
 Keyboard bindings:
 * G - Open debugger menu
@@ -64,9 +64,13 @@ Keyboard bindings:
 * Z/X - Action buttons
 * Space/Enter - Select/Start options buttons
 * S/R - Save/Restore current emulation state
-* F1 - Set heatmap printing threshold to 1
-* F2 - Set heatmap printing threshold to 10
-* F3 - Set heatmap printing threshold to 100
+
+> [!WARNING]
+> Pressing bind to save current state pushes save slots forward! So if you were
+> to press this key when you have all 10 slots occupied, the last slot will be
+> lost and slot 0 will be replaced with the current state. Also ALL THE STATES
+> are saved in the RAM in no way they're reaching user's disk so closing your
+> current emulation session results in savestates data loss!
 
 ## Dependencies
 > [!NOTE]

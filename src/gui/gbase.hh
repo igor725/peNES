@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 struct Console;
 struct SDL_Window;
 struct SDL_Renderer;
@@ -8,7 +10,10 @@ union SDL_Event;
 
 class GUI {
   public:
+  enum class SaveAction { Save, Load };
+
   void init(SDL_Window* wnd, SDL_Renderer* rend, SDL_AudioStream* strm);
+  void savestateAction(Console& nes, SaveAction sa, int8_t slot);
   void forwardEvent(SDL_Event const*);
   bool produceFrame(Console& nes);
   void triggerCPUHaltSequence();

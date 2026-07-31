@@ -1,6 +1,6 @@
 add_library(peNES_mappers STATIC
   base.cpp
-  mmc0.cpp
+  nrom.cpp
   mmc1.cpp
   mmc3.cpp
   cnrom.cpp

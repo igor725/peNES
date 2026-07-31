@@ -42,7 +42,7 @@ class UNROM: public Mapper {
     return dmp.extract();
   }
 
-  void restoreState(std::vector<uint8_t>& state) final {
+  void restoreState(std::vector<uint8_t> const& state) final {
     auto rst = prepareMapperDumper(state);
 
     m_bankSelect = rst.pop<decltype(m_bankSelect)>();

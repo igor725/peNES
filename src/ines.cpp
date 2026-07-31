@@ -28,7 +28,7 @@ void iNES::performSetup(bool doValidation) {
   }
 
   switch (auto const m = get()->hdr.getMapperId()) {
-    case 0x0000: m_mapper = createMMC0(this); break;
+    case 0x0000: m_mapper = createNROM(this); break;
     case 0x0001: m_mapper = createMMC1(this); break;
     case 0x0002: m_mapper = createUNROM(this); break;
     case 0x0003: m_mapper = createCNROM(this); break;

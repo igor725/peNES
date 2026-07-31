@@ -116,8 +116,8 @@ int32_t main(int32_t argc, char* argv[]) {
         } break;
         case SDL_EVENT_KEY_DOWN:
           if (ev.key.scancode == SDL_SCANCODE_ESCAPE) nes._cpu.reset();
-          if (ev.key.scancode == SDL_SCANCODE_S) nes.saveState();
-          if (ev.key.scancode == SDL_SCANCODE_R) nes.restoreState();
+          if (ev.key.scancode == SDL_SCANCODE_S) gui.savestateAction(nes, GUI::SaveAction::Save, -1);
+          if (ev.key.scancode == SDL_SCANCODE_R) gui.savestateAction(nes, GUI::SaveAction::Load, 0);
           if (ev.key.scancode == SDL_SCANCODE_G) guiActive ^= true;
         case SDL_EVENT_KEY_UP: {
           switch (ev.key.scancode) {
@@ -144,8 +144,8 @@ int32_t main(int32_t argc, char* argv[]) {
         } break;
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
           if (ev.gbutton.button == SDL_GAMEPAD_BUTTON_NORTH) nes.reset();
-          if (ev.gbutton.button == SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) nes.saveState();
-          if (ev.gbutton.button == SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) nes.restoreState();
+          if (ev.gbutton.button == SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) gui.savestateAction(nes, GUI::SaveAction::Save, -1);
+          if (ev.gbutton.button == SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) gui.savestateAction(nes, GUI::SaveAction::Load, 0);
         } /* Intentional fallthrough */
         case SDL_EVENT_GAMEPAD_BUTTON_UP: {
           switch (ev.gbutton.button) {

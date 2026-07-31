@@ -22,13 +22,6 @@ struct Console {
 
   static constexpr auto TARGET_FRAMETIME = Delta(1.0 / 60.0988);
 
-  struct FullState {
-    CPU6502::CPUState    cpuState;
-    PPU::PPUState        ppuState;
-    APU::APUState        apuState;
-    std::vector<uint8_t> mapperState;
-  };
-
   union PadState {
     struct {
       uint8_t a      : 1;
@@ -67,8 +60,6 @@ struct Console {
   std::condition_variable_any _wait;
   std::jthread                _thread;
 
-  std::optional<FullState> _fullState;
-
   Console();
 
   ~Console() { stop(); }
@@ -78,10 +69,6 @@ struct Console {
   void setAudioOut(uint32_t batchSize, double rate, APU::APUHandler&& handler);
 
   std::jthread setupThread();
-
-  void saveState();
-
-  void restoreState();
 
   void reset();
 

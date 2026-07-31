@@ -3,9 +3,9 @@
 
 #include <memory>
 
-class MMC0: public Mapper {
+class NROM: public Mapper {
   public:
-  MMC0(iNES* c): Mapper(c) {}
+  NROM(iNES* c): Mapper(c) {}
 
   uint8_t cpuOperation(bool /* isWrite */, uint16_t addr, uint8_t /* value */) final { // We're ignoring writes here completely
     return m_cartridge->data[m_progBaseOff + (addr & (m_cartridge->hdr.getProgNum() == 1 ? (PROG_BANK_SIZE - 1) : 0x7FFF))];
@@ -26,9 +26,9 @@ class MMC0: public Mapper {
 
   std::vector<uint8_t> dumpState() const final { return prepareMapperDumper().extract(); }
 
-  void restoreState(std::vector<uint8_t>& state) final { prepareMapperDumper(state); }
+  void restoreState(std::vector<uint8_t> const& state) final { prepareMapperDumper(state); }
 };
 
-std::unique_ptr<Mapper> createMMC0(iNES* c) {
-  return std::make_unique<MMC0>(c);
+std::unique_ptr<Mapper> createNROM(iNES* c) {
+  return std::make_unique<NROM>(c);
 }
