@@ -1089,6 +1089,7 @@ uint8_t CPU6502::step() {
   MICROPROFILE_SCOPEI("NES", "CPU Step", MP_DARKGREY);
 #endif
   if (m_state.intrFlags & INTRMASK_CPUHALT) return 0;
+  if (m_state.haltIn > 0 && --m_state.haltIn == 0) m_state.intrFlags |= INTRMASK_CPUHALT;
   if (m_brkpt.type == CPUBreak::Type::Exec && m_brkpt.address == m_state.regs.PC) m_brkpt.func();
   if (m_state.intrFlags & INTRMASK_NMI) {
     m_state.intrFlags &= ~INTRMASK_NMI;
@@ -1125,6 +1126,7 @@ uint8_t CPU6502::step() {
   } catch (HaltExecution const& ex) {
     m_state.intrFlags |= INTRMASK_CPUHALT;
     m_state.haltLine = ex.getLine();
+    m_state.haltIn   = 0;
     return 0;
   }
 }

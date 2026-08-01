@@ -194,6 +194,8 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 5> {
 
     uint8_t  intrFlags : 5;
     uint16_t haltLine  : 11;
+    uint8_t  haltIn    : 8;
+    uint8_t            : 8;
 
     std::array<uint8_t, 0x800> ram;
   };
@@ -387,6 +389,16 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 5> {
   bool isHalted() const { return (m_state.intrFlags & INTRMASK_CPUHALT) > 0; }
 
   void haltResume() { m_state.intrFlags &= ~INTRMASK_CPUHALT; }
+
+  void pause(uint8_t ticks = 0) {
+    if (ticks == 0) {
+      m_state.intrFlags |= INTRMASK_CPUHALT, m_state.haltLine = 0;
+      return;
+    }
+
+    m_state.intrFlags &= ~INTRMASK_CPUHALT;
+    m_state.haltIn = ticks, m_state.haltLine = 0;
+  }
 
   template <typename T>
   T readMem(EvalAddress const& addr) const {

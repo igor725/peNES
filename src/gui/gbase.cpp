@@ -186,6 +186,40 @@ bool GUI::produceFrame(Console& nes) {
     ImGui::Text(buf, (size_t)hexEditor.Bytes + hexEditor.SelectStartByte, (size_t)hexEditor.Bytes + hexEditor.SelectEndByte);
   };
 
+  static int32_t editActive = -1;
+
+  auto const drawHexEditField = [](const char* label, int32_t id, auto* value, const char* fspec) {
+    ImGui::PushID(id);
+
+    if (editActive == id) {
+      if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+
+      ImGuiDataType dtype = (sizeof(*value) == 1) ? ImGuiDataType_U8 : ImGuiDataType_U16;
+
+      if (ImGui::InputScalar("##edit", dtype, (void*)value, NULL, NULL, fspec, ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_EnterReturnsTrue)) {
+        editActive = -1;
+      }
+
+      if (ImGui::IsItemDeactivated() || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        editActive = -1;
+      }
+    } else {
+      char buf[32];
+      std::snprintf(buf, sizeof(buf), fspec, *value);
+
+      ImGui::Text("%s", buf);
+
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Double-click to edit");
+        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+          editActive = id;
+        }
+      }
+    }
+
+    ImGui::PopID();
+  };
+
   bool open = true;
 
   ImGui_ImplSDLRenderer3_NewFrame();
@@ -235,18 +269,78 @@ bool GUI::produceFrame(Console& nes) {
           nes._cpu.reset();
         }
         if (halted) {
-          _cpuHalt = false;
-          ImGui::SameLine();
-          if (ImGui::Button("Resume (Dangerous)")) {
-            nes._cpu.haltResume();
-          }
-
           auto const& state = nes._cpu.exposeState();
 
-          ImGui::Text("Halt position: src/cpu.cpp:%d", state.haltLine);
-          ImGui::Text("Registers:\n  A:$%02X, PC:$%04X, SP:$%02X, X:$%02X, Y:$%02X", state.regs.A, state.regs.PC, state.regs.SP, state.regs.X, state.regs.Y);
-          ImGui::Text("Status:\n  C:%X, Z:%X, I:%X, D:%X, B:%X, U:%X, V:%X, N:%X", state.regs.SR.C, state.regs.SR.Z, state.regs.SR.I, state.regs.SR.D,
-                      state.regs.SR.B, state.regs.SR.U, state.regs.SR.V, state.regs.SR.N);
+          _cpuHalt = false;
+          ImGui::SameLine();
+          if (ImGui::Button("Resume")) {
+            nes._cpu.haltResume();
+          }
+          ImGui::SameLine();
+          if (ImGui::Button("Step")) {
+            nes._cpu.pause(1);
+          }
+
+          if (state.haltLine) ImGui::Text("Halt position: src/cpu.cpp:%d", state.haltLine);
+          if (ImGui::BeginTable("RegsTable", 2, ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingFixedFit)) {
+            ImGui::TableSetupColumn("Register", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+            ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableHeadersRow();
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted("PC");
+            ImGui::TableNextColumn();
+            drawHexEditField("PC", 1, &state.regs.PC, "%04X");
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted("A");
+            ImGui::TableNextColumn();
+            drawHexEditField("A", 2, &state.regs.A, "%02X");
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted("X");
+            ImGui::TableNextColumn();
+            drawHexEditField("X", 3, &state.regs.X, "%02X");
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted("Y");
+            ImGui::TableNextColumn();
+            drawHexEditField("Y", 4, &state.regs.Y, "%02X");
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted("SP");
+            ImGui::TableNextColumn();
+            drawHexEditField("SP", 5, &state.regs.SP, "%02X");
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted("SR");
+            ImGui::TableNextColumn();
+            drawHexEditField("SR", 6, &state.regs.SR._raw, "%02X");
+
+            ImGui::EndTable();
+          }
+        } else {
+          ImGui::SameLine();
+          if (ImGui::Button("Pause")) {
+            nes._cpu.pause();
+          }
+
+          static int32_t  curr = 0;
+          static uint16_t addr = 0;
+          ImGui::Combo("BrkptType", &curr, "None\0Memory being executed\0Memory  was written\0Memory was read");
+          ImGui::BeginDisabled(curr == 0);
+          ImGui::InputScalar("##edit", ImGuiDataType_U16, (void*)&addr, NULL, NULL, "%04X",
+                             ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_EnterReturnsTrue);
+          ImGui::EndDisabled();
+          if (ImGui::Button("Apply")) {
+            nes._cpu.setBreakpoint({.type = (CPU6502::CPUBreak::Type)curr, .address = addr, .func = [cpu = &nes._cpu] { cpu->pause(); }});
+          }
         }
 
         ImGui::EndTabItem();
