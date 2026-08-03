@@ -1139,25 +1139,15 @@ uint8_t CPU6502::writeMemByte(EvalAddress const& eval, uint8_t value) {
   if (!eval.validAddr) throw HaltExecution(__LINE__);
   auto const addr = eval.getAddress();
   if (m_brkpt.type == CPUBreak::Type::Write && m_brkpt.address == addr) m_brkpt.func();
-  if (addr <= 0x1FFF) return m_state.ram[addr & 0x7ff] = value;
-
-  if (auto const han = findHandler(addr)) {
-    if (auto const ret = (*han)(true, addr, value); ret.has_value()) return ret.value();
-  }
-
-  return value;
+  return MMU::writeByte(addr, value);
 }
 
 uint8_t CPU6502::readMemByte(EvalAddress const& eval) const {
   if (!eval.validAddr) throw HaltExecution(__LINE__);
   auto const addr = eval.getAddress();
   if (m_brkpt.type == CPUBreak::Type::Read && m_brkpt.address == addr) m_brkpt.func();
-  if (addr <= 0x1FFF) return m_state.ram[addr & 0x7ff];
 
-  if (auto const han = findHandler(addr)) {
-    if (auto const ret = (*han)(false, addr, 0); ret.has_value()) return ret.value();
-  }
-
+  if (auto const byte = MMU::readByte(addr); byte.has_value()) return byte.value();
   return (eval.baseAddress >> 8); // 100thCoin's open bus accuracy test 2+3. Not sure if I want to get any further into this rabbit hole
 }
 

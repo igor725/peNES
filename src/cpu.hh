@@ -2,11 +2,12 @@
 
 #include "mmu.hh"
 
-#include <array>
 #include <cstdint>
 #include <string>
 
-class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 5> {
+class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 0x800 /* Size of RAM available on NES */, false, 5> {
+  static constexpr size_t STACKMEM_BASE = 0x0100;
+
   enum class InstClass : uint8_t {
     Control,
     Math,
@@ -196,8 +197,6 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 5> {
     uint16_t haltLine  : 11;
     uint8_t  haltIn    : 8;
     uint8_t            : 8;
-
-    std::array<uint8_t, 0x800> ram;
   };
 
   struct [[gnu::packed]] InstructionStatus {
@@ -273,7 +272,7 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 5> {
   void pushStack(T val) {
     static_assert(std::is_integral_v<T> && sizeof(T) <= 2);
     if constexpr (sizeof(T) == 1) {
-      m_state.ram[0x100 + m_state.regs.SP--] = val;
+      MMU::m_ungovMemory[STACKMEM_BASE + m_state.regs.SP--] = val;
     } else if constexpr (sizeof(T) == 2) {
       pushStack<uint8_t>((val >> 8) & 0xFF);
       pushStack<uint8_t>(val & 0xFF);
@@ -284,7 +283,7 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 5> {
   T popStack() {
     static_assert(std::is_integral_v<T> && sizeof(T) <= 2);
     if constexpr (sizeof(T) == 1) {
-      return m_state.ram[0x100 | ++m_state.regs.SP];
+      return MMU::m_ungovMemory[STACKMEM_BASE | ++m_state.regs.SP];
     } else if constexpr (sizeof(T) == 2) {
       auto const _low  = popStack<uint8_t>();
       auto const _high = popStack<uint8_t>();
@@ -430,9 +429,9 @@ class CPU6502: public MMU<uint16_t, 0x2000, 0xFFFF, 5> {
     return readMem<T>(orig);
   }
 
-  CPUState dumpState() const { return m_state; }
-
   CPUState& exposeState() { return m_state; }
+
+  CPUState dumpState() const { return m_state; }
 
   void restoreState(CPUState const& state) { m_state = state; }
 

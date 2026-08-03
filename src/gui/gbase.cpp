@@ -17,11 +17,13 @@
 
 class SavesSystem {
   struct FullState {
-    std::string          dateName;
-    CPU6502::CPUState    cpuState;
-    PPU::PPUState        ppuState;
-    APU::APUState        apuState;
-    std::vector<uint8_t> mapperState;
+    std::string                dateName;
+    CPU6502::CPUState          cpuState;
+    CPU6502::MMU::UngovMemType ramState;
+    PPU::PPUState              ppuState;
+    PPU::MMU::UngovMemType     ppuMemState;
+    APU::APUState              apuState;
+    std::vector<uint8_t>       mapperState;
   };
 
   SavesSystem() {}
@@ -45,7 +47,9 @@ class SavesSystem {
         .dateName = std::format(
             "{:%F %T}", std::chrono::zoned_time {std::chrono::current_zone(), std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now())}),
         .cpuState    = nes._cpu.dumpState(),
+        .ramState    = nes._cpu.dumpUngoverned(),
         .ppuState    = nes._ppu.dumpState(),
+        .ppuMemState = nes._ppu.dumpUngoverned(),
         .apuState    = nes._apu.dumpState(),
         .mapperState = nes._cartridge.getMapper()->dumpState(),
     };
@@ -66,7 +70,9 @@ class SavesSystem {
     auto const& state = m_saves.at(slot);
     if (!state.has_value()) return;
     nes._cpu.restoreState(state->cpuState);
+    nes._cpu.restoreUngoverned(state->ramState);
     nes._ppu.restoreState(state->ppuState);
+    nes._ppu.restoreUngoverned(state->ppuMemState);
     nes._apu.restoreState(state->apuState);
     nes._cartridge.getMapper()->restoreState(state->mapperState);
   }
@@ -350,7 +356,7 @@ bool GUI::produceFrame(Console& nes) {
           hexEditor.SelectStartByte = 0;
           hexEditor.SelectEndByte   = 0;
           hexEditor.Bytes           = (void*)0;
-          hexEditor.MaxBytes        = sizeof(CPU6502::CPUState::ram);
+          hexEditor.MaxBytes        = CPU6502::MMU::UngovernedMemorySize;
         }
 
         drawHexEditor();

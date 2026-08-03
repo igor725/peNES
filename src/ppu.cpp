@@ -18,7 +18,7 @@ uint16_t PPU::getNametableMirroringOffset(uint16_t addr) {
   switch (m_mirroring) {
     case MirroringMode::OneScreenLow: return addr & 0x3FF;
     case MirroringMode::OneScreenUp: return (addr & 0x3FF) + 0x400;
-    case MirroringMode::Vertical: return addr & 0x3FF + (addr >= 0x400 && addr < 0x800 ? 0x400 : 0) + (addr >= 0xC00 ? 0x400 : 0);
+    case MirroringMode::Vertical: return (addr & 0x3FF) + (addr >= 0x400 && addr < 0x800 ? 0x400 : 0) + (addr >= 0xC00 ? 0x400 : 0);
     case MirroringMode::Horizontal: return addr < 0x800 ? addr & 0x3FF : (addr & 0x3FF) + 0x400;
     default: throw;
   }
@@ -31,16 +31,14 @@ uint8_t PPU::readInternal(uint16_t addr) {
     uint16_t nt_address = addr;
     if (nt_address >= 0x3000) nt_address -= 0x1000;
     uint16_t vram_offset = getNametableMirroringOffset(nt_address);
-    return m_state.vram[vram_offset];
+    return MMU::m_ungovMemory[VRAM_BASE + vram_offset];
   } else if (addr >= 0x3F00 && addr <= 0x3FFF) {
     uint16_t palette_address = (addr - 0x3F00) & 0x001F;
     if ((palette_address & 0x0003) == 0 && (palette_address & 0x0010)) palette_address &= 0x000F;
     auto const paletteMask = m_state.regs.M & MASK_GREYSCALE ? 0b00110000 : 0b00111111;
-    return (m_state.palette[palette_address] & paletteMask) | (m_state.decay & 0xC0);
+    return (MMU::m_ungovMemory[PALETTE_BASE + palette_address] & paletteMask) | (m_state.decay & 0xC0);
   } else {
-    if (auto const han = findHandler(addr)) {
-      if (auto const ret = (*han)(false, addr, 0); ret.has_value()) return ret.value();
-    }
+    if (auto const ret = MMU::readByte(addr); ret.has_value()) return ret.value();
   }
 
   throw;
@@ -55,8 +53,7 @@ void PPU::writeInternal(uint16_t addr, uint8_t value) {
       nt_address -= 0x1000;
     }
 
-    uint16_t vram_offset      = getNametableMirroringOffset(nt_address);
-    m_state.vram[vram_offset] = value;
+    MMU::m_ungovMemory[VRAM_BASE + getNametableMirroringOffset(nt_address)] = value;
   } else if (addr >= 0x3F00 && addr <= 0x3FFF) {
     uint16_t palette_address = (addr - 0x3F00) & 0x001F;
 
@@ -64,14 +61,9 @@ void PPU::writeInternal(uint16_t addr, uint8_t value) {
       palette_address &= 0x000F;
     }
 
-    m_state.palette[palette_address] = value;
+    MMU::m_ungovMemory[PALETTE_BASE + palette_address] = value;
   } else {
-    if (auto const han = findHandler(addr)) {
-      (*han)(true, addr, value);
-      return;
-    }
-
-    throw;
+    MMU::writeByte(addr, value);
   }
 }
 
@@ -91,7 +83,8 @@ std::optional<uint8_t> PPU::cpuRead(uint16_t addr) {
       m_state.writeLatch = 0;
     } break;
     case 0x04 /* OAMDATA */: {
-      data = m_state.oam[m_state.oamAddr] & (PRE_RP2C02G_BEHAVIOR ? 0b11100001 : 0b11111111); // According to AccuracyCoin this is a pre-PPU rev.G behavior
+      data = MMU::m_ungovMemory[OAM_BASE + m_state.oamAddr] &
+             (PRE_RP2C02G_BEHAVIOR ? 0b11100001 : 0b11111111); // According to AccuracyCoin this is a pre-PPU rev.G behavior
       if (m_state.oamAddr > 0 && ((m_state.oamAddr & 1) == 0)) {
         m_state.decay = 0, m_state.nextDecay = CPU6502::BASE_CLOCK_FREQUENCY;
       }
@@ -119,7 +112,7 @@ uint8_t PPU::dmaWrite(uint8_t value) {
   uint16_t cpuPageAddress = static_cast<uint16_t>(value) << 8;
 
   for (uint32_t i = 0; i < 256; i++) {
-    m_state.oam[(m_state.oamAddr + i) & 0xFF] = m_cpu.readMem<uint8_t>(cpuPageAddress + i);
+    MMU::m_ungovMemory[OAM_BASE + ((m_state.oamAddr + i) & 0xFF)] = m_cpu.readMem<uint8_t>(cpuPageAddress + i);
   }
 
   return value;
@@ -139,7 +132,7 @@ std::optional<uint8_t> PPU::cpuWrite(uint16_t addr, uint8_t value) {
     case 0x01: /* PPUMASK */ m_state.regs.M = value; break;
 
     case 0x03 /*  OAMADDR */: m_state.oamAddr = value; break;
-    case 0x04 /*  PPUDATA */: m_state.oam[m_state.oamAddr++] = value; break;
+    case 0x04 /*  PPUDATA */: MMU::m_ungovMemory[OAM_BASE + m_state.oamAddr++] = value; break;
 
     case 0x05 /* PPUSCROLL */: {
       if (m_state.writeLatch == 0) {
@@ -180,7 +173,7 @@ void PPU::findSpritesOnScanline() {
   uint16_t const spriteHeight = m_state.regs.C & CTRL_TALL_SPRITE ? 16 : 8;
 
   for (uint8_t i = 0; i < 64; ++i) {
-    uint16_t spriteY = m_state.scanline - m_state.oam[i * 4 + 0] - 1;
+    uint16_t spriteY = m_state.scanline - MMU::m_ungovMemory[OAM_BASE + (i * 4 + 0)] - 1;
 
     if (spriteY < spriteHeight) {
       if (m_state.spritesPerScan >= 8) {
@@ -190,11 +183,11 @@ void PPU::findSpritesOnScanline() {
 
       ScanSprite ss;
       ss.id   = i;
-      ss.attr = m_state.oam[i * 4 + 2];
-      ss.x    = m_state.oam[i * 4 + 3];
+      ss.attr = MMU::m_ungovMemory[OAM_BASE + (i * 4 + 2)];
+      ss.x    = MMU::m_ungovMemory[OAM_BASE + (i * 4 + 3)];
 
       uint16_t sprAddr;
-      uint16_t sprTile = m_state.oam[i * 4 + 1];
+      uint16_t sprTile = MMU::m_ungovMemory[OAM_BASE + (i * 4 + 1)];
       uint16_t sy      = spriteY ^ (ss.attr & SPRITE_FLIP_VERTI ? spriteHeight - 1 : 0);
 
       if (spriteHeight == 16) {

@@ -8,7 +8,15 @@
 
 class CPU6502;
 
-class PPU: public MMU<uint16_t, 0, 0x1FFF, 5> {
+class PPU: public MMU<uint16_t, 0, 0x2000, 0x920, true, 6, 1> {
+  static constexpr size_t VRAM_SIZE    = 0x800;
+  static constexpr size_t PALETTE_SIZE = 0x020;
+  static constexpr size_t OAM_SIZE     = 0x100;
+
+  static constexpr size_t VRAM_BASE    = 0;
+  static constexpr size_t PALETTE_BASE = VRAM_BASE + VRAM_SIZE;
+  static constexpr size_t OAM_BASE     = PALETTE_BASE + PALETTE_SIZE;
+
   static constexpr bool PRE_RP2C02G_BEHAVIOR = false;
 
   struct RegionTiming {
@@ -92,9 +100,6 @@ class PPU: public MMU<uint16_t, 0, 0x1FFF, 5> {
     uint32_t shiftAt        = 0;
     int32_t  nextDecay      = 0;
 
-    std::array<uint8_t, 2048> vram;
-    std::array<uint8_t, 32>   palette;
-    std::array<uint8_t, 256>  oam;
     std::array<ScanSprite, 8> scanSprites;
   };
 
