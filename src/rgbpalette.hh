@@ -1,7 +1,6 @@
 #pragma once
 
 #include <algorithm>
-#include <cmath>
 #include <cstdint>
 
 class PaletteRGB {
@@ -29,11 +28,11 @@ class PaletteRGB {
 
   protected:
   void updatePalette() {
-    const float lumaLow[4]  = {-0.117f, 0.000f, 0.308f, 0.715f};
-    const float lumaHigh[4] = {0.397f, 0.681f, 1.000f, 1.000f};
+    float const lumaLow[4]  = {-0.117f, 0.000f, 0.308f, 0.715f};
+    float const lumaHigh[4] = {0.397f, 0.681f, 1.000f, 1.000f};
 
     for (uint8_t i = 0; i < 64; ++i) {
-      uint8_t color = i & 0x0F, level = (i >> 4) & 0x03;
+      uint8_t const color = i & 0x0F, level = (i >> 4) & 0x03;
 
       float v0, v1;
       if (color == 0x00) {
@@ -56,19 +55,19 @@ class PaletteRGB {
           sig = v0;
         }
 
-        float angle = p * (PI_NUM / 6.0f) + m_hueShift;
-        float y     = sig;
-        float iComp = sig * std::cos(angle) * m_saturation;
-        float qComp = sig * std::sin(angle) * m_saturation;
+        float const angle = p * (PI_NUM / 6.0f) + m_hueShift;
+        float const y     = sig;
+        float const iComp = sig * __builtin_cosf(angle) * m_saturation;
+        float const qComp = sig * __builtin_sinf(angle) * m_saturation;
 
         rSum += y + 0.956f * iComp + 0.621f * qComp * m_contrast;
         gSum += y - 0.272f * iComp - 0.647f * qComp * m_contrast;
         bSum += y - 1.106f * iComp + 1.703f * qComp * m_contrast;
       }
 
-      float r = std::pow(std::max(0.0f, rSum / 12.0f), 1.0f) * 255.f;
-      float g = std::pow(std::max(0.0f, gSum / 12.0f), 1.0f) * 255.f;
-      float b = std::pow(std::max(0.0f, bSum / 12.0f), 1.0f) * 255.f;
+      float const r = std::max(0.0f, rSum / 12.0f) * 255.f;
+      float const g = std::max(0.0f, gSum / 12.0f) * 255.f;
+      float const b = std::max(0.0f, bSum / 12.0f) * 255.f;
 
       m_palette[i] = 0xFF000000 | (static_cast<uint8_t>(std::clamp(r, 0.0f, 255.0f)) << 16) | (static_cast<uint8_t>(std::clamp(g, 0.0f, 255.0f)) << 8) |
                      static_cast<uint8_t>(std::clamp(b, 0.0f, 255.0f));
