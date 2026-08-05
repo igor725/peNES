@@ -339,9 +339,9 @@ bool GUI::produceFrame(Console& nes) {
 
           static int32_t  curr = 0;
           static uint16_t addr = 0;
-          ImGui::Combo("BrkptType", &curr, "None\0Memory being executed\0Memory  was written\0Memory was read");
+          ImGui::Combo("Breakpoint Type", &curr, "None\0Memory being executed\0Memory  was written\0Memory was read");
           ImGui::BeginDisabled(curr == 0);
-          ImGui::InputScalar("##edit", ImGuiDataType_U16, (void*)&addr, NULL, NULL, "%04X",
+          ImGui::InputScalar("Breakpoint Address", ImGuiDataType_U16, (void*)&addr, NULL, NULL, "%04X",
                              ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_EnterReturnsTrue);
           ImGui::EndDisabled();
           if (ImGui::Button("Apply")) {
