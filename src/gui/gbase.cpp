@@ -195,12 +195,16 @@ bool GUI::produceFrame(Console& nes) {
   static int32_t editActive = -1;
 
   auto const drawHexEditField = [](const char* label, int32_t id, auto* value, const char* fspec) {
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::TextUnformatted(label);
+    ImGui::TableNextColumn();
     ImGui::PushID(id);
 
     if (editActive == id) {
       if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
 
-      ImGuiDataType dtype = (sizeof(*value) == 1) ? ImGuiDataType_U8 : ImGuiDataType_U16;
+      constexpr ImGuiDataType dtype = (sizeof(*value) == 1) ? ImGuiDataType_U8 : ImGuiDataType_U16;
 
       if (ImGui::InputScalar("##edit", dtype, (void*)value, NULL, NULL, fspec, ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_EnterReturnsTrue)) {
         editActive = -1;
@@ -293,40 +297,11 @@ bool GUI::produceFrame(Console& nes) {
             ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableHeadersRow();
 
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::TextUnformatted("PC");
-            ImGui::TableNextColumn();
             drawHexEditField("PC", 1, &state.regs.PC, "%04X");
-
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::TextUnformatted("A");
-            ImGui::TableNextColumn();
             drawHexEditField("A", 2, &state.regs.A, "%02X");
-
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::TextUnformatted("X");
-            ImGui::TableNextColumn();
             drawHexEditField("X", 3, &state.regs.X, "%02X");
-
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::TextUnformatted("Y");
-            ImGui::TableNextColumn();
             drawHexEditField("Y", 4, &state.regs.Y, "%02X");
-
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::TextUnformatted("SP");
-            ImGui::TableNextColumn();
             drawHexEditField("SP", 5, &state.regs.SP, "%02X");
-
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::TextUnformatted("SR");
-            ImGui::TableNextColumn();
             drawHexEditField("SR", 6, &state.regs.SR._raw, "%02X");
 
             ImGui::EndTable();
