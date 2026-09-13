@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "(gdb) Launch",
-      "type": "cppdbg",
+      "type": "lldb",
       "request": "launch",
       "program": "${command:cmake.launchTargetPath}",
       "args": [
@@ -13,12 +13,13 @@
         "true",
         // "./simple.nes",
         // "./2048.nes",
-        // "./smb.nes",
-        "./AccuracyCoin.nes",
+        "./smb.nes",
+        // "./AccuracyCoin.nes",
         // "./zelda.nes",
         // "./SnowBros.nes",
         // "./Chip_and_Dale.nes",
         // "./SnowBrosAlive.nes",
+        // "./Super Mario Bros. 3.nes",
         // "./nestest.nes",
         // "./scroll.nes",
         // "./ppu/palette_ram.nes",
@@ -31,23 +32,10 @@
         // "./ppu/ppu_vbl_nmi.nes",
         // "./mapperTests/M1_P512K_S32K.nes",
       ],
-      "stopAtEntry": false,
       "cwd": "${command:cmake.launchTargetDirectory}",
-      "environment": [],
-      "externalConsole": false,
-      "MIMode": "gdb",
-      "setupCommands": [
-        {
-          "description": "Enable pretty-printing for gdb",
-          "text": "-enable-pretty-printing",
-          "ignoreFailures": true
-        },
-        {
-          "description": "Set Disassembly Flavor to Intel",
-          "text": "-gdb-set disassembly-flavor intel",
-          "ignoreFailures": true
-        }
-      ]
+      "initCommands": [
+        "settings set target.x86-disassembly-flavor intel",
+      ],
     }
   ]
 }
